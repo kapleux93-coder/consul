@@ -71,8 +71,17 @@ async function main() {
   okMark('Бот: @' + me.username + ' (' + me.first_name + ')');
 
   if (cfg.botUsername !== me.username) {
-    try { writeEnv('BOT_USERNAME', me.username); okMark('BOT_USERNAME записан в .env'); }
-    catch (e) { say('! не смог записать BOT_USERNAME в .env: ' + e.message + ' — задайте вручную'); }
+    // На хостинге файловая система эфемерная: .env переживёт запуск, но не
+    // следующий деплой. Поэтому там просим задать переменную в панели.
+    const ephemeral = !!(process.env.RENDER || process.env.RAILWAY_PUBLIC_DOMAIN || process.env.FLY_APP_NAME);
+    if (ephemeral) {
+      say('! Задайте переменную окружения в панели хостинга:');
+      say('    BOT_USERNAME=' + me.username);
+      say('  Без неё не будут работать ссылки-приглашения менеджерам.');
+    } else {
+      try { writeEnv('BOT_USERNAME', me.username); okMark('BOT_USERNAME записан в .env'); }
+      catch (e) { say('! не смог записать BOT_USERNAME в .env: ' + e.message + ' — задайте вручную: BOT_USERNAME=' + me.username); }
+    }
   }
 
   const url = cfg.publicUrl;
@@ -106,12 +115,19 @@ async function main() {
       okMark('Вебхук платформенного бота установлен');
     } catch (e) { failMark('Вебхук: ' + e.message); }
   } else if (url) {
-    const gen = require('crypto').randomBytes(16).toString('hex');
-    try {
-      writeEnv('PLATFORM_WEBHOOK_SECRET', gen);
-      await tg.setWebhook(token, url + '/tg-platform/' + gen, gen);
-      okMark('PLATFORM_WEBHOOK_SECRET создан и вебхук установлен');
-    } catch (e) { say('! вебхук платформенного бота: ' + e.message + ' — будет long polling'); }
+    const ephemeral = !!(process.env.RENDER || process.env.RAILWAY_PUBLIC_DOMAIN || process.env.FLY_APP_NAME);
+    if (ephemeral) {
+      say('! PLATFORM_WEBHOOK_SECRET не задан. Добавьте любую случайную строку');
+      say('  в переменные окружения панели и запустите setup ещё раз —');
+      say('  иначе приглашения менеджеров будут работать только через опрос.');
+    } else {
+      const gen = require('crypto').randomBytes(16).toString('hex');
+      try {
+        writeEnv('PLATFORM_WEBHOOK_SECRET', gen);
+        await tg.setWebhook(token, url + '/tg-platform/' + gen, gen);
+        okMark('PLATFORM_WEBHOOK_SECRET создан и вебхук установлен');
+      } catch (e) { say('! вебхук платформенного бота: ' + e.message + ' — будет long polling'); }
+    }
   } else {
     await tg.deleteWebhook(token);
     say('· Вебхук снят: без PUBLIC_URL бот работает через long polling');
