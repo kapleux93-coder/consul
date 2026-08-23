@@ -1,0 +1,48 @@
+# Деплой на Render через Blueprint.
+#
+# Render ищет этот файл в корне репозитория, а сам сервис живёт в подпапке —
+# на неё указывает rootDir. Поля «Root Directory» в интерфейсе Blueprint нет,
+# оно есть только в обычном Web Service.
+#
+# После создания задайте в панели два секрета — GROQ_API_KEY и BOT_TOKEN —
+# и один раз выполните в Shell сервиса: npm run setup
+# PUBLIC_URL подставляется сам из RENDER_EXTERNAL_URL.
+#
+# Диск обязателен: на нём кабинеты пользователей и ключ шифрования токенов.
+# Потеряете диск — все владельцы будут подключать ботов заново.
+#
+# ВНИМАНИЕ про plan: Blueprint синхронизируется автоматически, поэтому план
+# берётся отсюда. Если поднимете тариф в панели, а тут останется free —
+# следующая синхронизация вернёт free. Меняйте план в этом файле.
+# Для боевого запуска free не подходит: инстанс засыпает без активности,
+# и часть сообщений во время просыпания теряется.
+services:
+  - type: web
+    name: consul
+    runtime: node
+    plan: free
+    rootDir: consul-server
+    buildCommand: "echo зависимостей нет"
+    startCommand: "node server.js"
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: CONSUL_DATA_DIR
+        value: /var/data
+      - key: GROQ_API_KEY
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      - key: CONSUL_ENC_KEY
+        generateValue: true
+      - key: PLATFORM_WEBHOOK_SECRET
+        generateValue: true
+      - key: ADMIN_IDS
+        sync: false
+    disk:
+      name: consul-data
+      mountPath: /var/data
+      sizeGB: 1
