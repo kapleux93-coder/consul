@@ -1,0 +1,2336 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<title>Consul — AI-менеджер</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+:root{
+  --canvas:#EFEDE8; --card:#FFFFFF; --ink:#14161A; --ink2:#2C3037; --ink3:#3C4148;
+  --muted:#5F656D; --muted2:#7C828A; --muted3:#8A9098; --muted4:#9AA0A6; --muted5:#A5AAB0; --muted6:#B6BBC1;
+  --accent:#F26722; --accent-h:#D8541A; --accent-d:#C9531A; --accent-t:#FFEFE5; --accent-t2:#FFF7F1; --accent-t3:#FFF0E7; --accent-b:#FBE2D0; --accent-ink:#8A5B39; --accent-ink2:#B0764C;
+  --soft:#F8F7F4; --soft2:#F5F4F1; --soft3:#FBFAF8; --soft4:#FBFAF8;
+  --line:#EDEAE4; --line2:#E7E4DE; --line3:#F1F0EC; --line4:#EFEDE8; --line5:#EAE7E1; --dash:#D9D5CD;
+  --green:#1FA971; --green-d:#158257; --green-t:#E8F7F0; --green-l:#3DDC97;
+  --blue-t:#EDF3FF; --blue-d:#2E5AAC;
+  --dark:#14161A; --dark2:#1F2226; --dark3:#2A2E34; --dark-mut:#9BA1A9;
+  --f:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --m:'Space Grotesk',ui-monospace,'SF Mono',menlo,sans-serif;
+  --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--canvas);overflow:hidden}
+body{font-family:var(--f);color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer;text-align:left}
+input,textarea,select{font-family:inherit;color:inherit;background:none;border:none;outline:none;width:100%;resize:none}
+input::placeholder,textarea::placeholder{color:var(--muted6)}
+::-webkit-scrollbar{display:none}
+*{scrollbar-width:none}
+
+#app{position:fixed;inset:0;max-width:440px;margin:0 auto;background:var(--card);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 0 0 1px rgba(30,24,16,.06)}
+
+/* ---------- view system ---------- */
+.view{position:absolute;inset:0;display:none;flex-direction:column;background:var(--card);z-index:1}
+.view.active{display:flex;z-index:2;animation:vin .26s cubic-bezier(.22,.9,.3,1)}
+.view.active.back{animation:vinb .26s cubic-bezier(.22,.9,.3,1)}
+@keyframes vin{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+@keyframes vinb{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
+
+.body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column}
+.pad{padding:22px 22px 26px;display:flex;flex-direction:column;gap:18px;flex:1}
+.pad-core{padding:calc(26px + var(--safe-top)) 20px 20px;display:flex;flex-direction:column;gap:18px;flex:1}
+.push{margin-top:auto}
+.col{display:flex;flex-direction:column}
+.row{display:flex;align-items:center}
+.between{display:flex;align-items:center;justify-content:space-between}
+.g4{gap:4px}.g6{gap:6px}.g7{gap:7px}.g8{gap:8px}.g9{gap:9px}.g10{gap:10px}.g11{gap:11px}.g12{gap:12px}.g13{gap:13px}.g14{gap:14px}.g16{gap:16px}.g18{gap:18px}.g20{gap:20px}
+.f1{flex:1;min-width:0}
+.none{flex:none}
+.wrap{flex-wrap:wrap}
+
+/* ---------- topbar ---------- */
+.topbar{height:52px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--line4);margin-top:var(--safe-top)}
+.topbar .t{font:600 15px/1 var(--f)}
+.topbar .l{font:500 15px/1 var(--f);color:var(--muted3)}
+.topbar .r{font:500 14px/1 var(--m);color:var(--muted4)}
+
+/* ---------- progress ---------- */
+.steps{display:flex;gap:6px}
+.steps i{height:3px;flex:1;border-radius:2px;background:#E9E6E0;transition:background .3s}
+.steps i.on{background:var(--accent)}
+
+/* ---------- type ---------- */
+.h1{font:600 36px/1.1 var(--f);letter-spacing:-.03em}
+.h2{font:600 28px/1.15 var(--f);letter-spacing:-.025em}
+.h3{font:600 26px/1.12 var(--f);letter-spacing:-.02em}
+.h4{font:600 24px/1.1 var(--f);letter-spacing:-.02em}
+.h5{font:600 16px/1 var(--f)}
+.sub{font:400 15px/1.5 var(--f);color:var(--muted2);text-wrap:pretty}
+.sub-s{font:400 14px/1.5 var(--f);color:var(--muted2);text-wrap:pretty}
+.lbl{font:500 11px/1 var(--m);letter-spacing:.12em;text-transform:uppercase;color:var(--muted4)}
+.cap{font:400 13px/1.4 var(--f);color:var(--muted4)}
+.cap2{font:400 12px/1.3 var(--f);color:var(--muted4)}
+.num{font-family:var(--m)}
+
+/* ---------- controls ---------- */
+.btn{height:54px;border-radius:15px;background:var(--accent);display:flex;align-items:center;justify-content:center;gap:8px;font:600 16px/1 var(--f);color:#fff;width:100%;transition:transform .09s ease,opacity .15s}
+.btn:active{transform:scale(.985)}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.btn.dark{background:var(--dark)}
+.btn.ghost{background:transparent;border:1px solid var(--line2);color:var(--ink);height:48px;font-size:15px}
+.btn.tint{background:var(--accent-t);color:var(--accent-d);height:48px;font-size:15px;border-radius:14px}
+.btn.sm{height:44px;border-radius:13px;font-size:14px}
+.link{height:42px;display:flex;align-items:center;justify-content:center;font:500 15px/1 var(--f);color:var(--muted3);width:100%}
+.a{color:var(--accent);font:500 13px/1 var(--f)}
+.a15{color:var(--accent);font:500 15px/1 var(--f)}
+
+.field{display:flex;flex-direction:column;gap:7px}
+.inp{border:1px solid var(--line2);border-radius:13px;padding:14px;font:500 15px/1.35 var(--f);background:var(--card);display:flex;align-items:center;justify-content:space-between;gap:10px;transition:border-color .18s}
+.inp:focus-within{border-color:var(--accent)}
+.inp.mono input{font-family:var(--m)}
+.inp textarea{min-height:64px;line-height:1.45;font-weight:400;color:var(--ink3)}
+.inp.err{border-color:#E04B4B}
+.hint{font:400 13px/1.45 var(--f);color:var(--muted4)}
+.hint.err{color:#C93A3A}
+
+.seg{display:flex;gap:8px}
+.seg button{flex:1;border-radius:13px;background:var(--soft);border:1px solid var(--line);color:var(--muted);padding:13px 0;text-align:center;font:500 14px/1 var(--f);transition:.15s}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+
+.chip{border-radius:999px;background:var(--soft2);color:var(--muted);padding:9px 14px;font:500 13px/1 var(--f);white-space:nowrap;transition:.15s}
+.chip.on{background:var(--dark);color:#fff}
+.chip.warm{background:var(--accent-t3);color:var(--accent-d)}
+.chip.warm.on{background:var(--accent-d);color:#fff}
+.chip.tag{background:var(--accent-t);color:var(--accent-d);padding:9px 14px;font-size:14px}
+.chip.add{background:var(--soft);border:1px solid var(--line);color:var(--muted2);font-size:14px}
+.chip.out{background:transparent;border:1px solid var(--line2);color:var(--muted4)}
+
+.sw{width:42px;height:26px;border-radius:13px;background:#E2DFD8;position:relative;flex:none;transition:background .2s}
+.sw i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:10px;background:#fff;transition:left .2s cubic-bezier(.3,1.4,.5,1);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.sw.on{background:var(--accent)}
+.sw.on i{left:19px}
+
+.box{background:var(--soft);border:1px solid var(--line);border-radius:18px;padding:16px}
+.box.plain{background:var(--card);border-color:var(--line)}
+.box.warm{background:var(--accent-t2);border-color:var(--accent-b);font:400 14px/1.45 var(--f);color:var(--accent-ink)}
+.list{background:var(--soft);border:1px solid var(--line);border-radius:18px;padding:0 16px}
+.list>*{padding:14px 0;border-bottom:1px solid var(--line5)}
+.list>*:last-child{border-bottom:none}
+.list.plain{background:var(--card);border-color:var(--line);border-radius:20px}
+.list.plain>*{border-bottom-color:var(--line3);padding:16px 0}
+
+.av{border-radius:14px;background:var(--soft2);color:var(--muted2);font:600 14px/1 var(--m);display:flex;align-items:center;justify-content:center;flex:none}
+.av.warm{background:var(--accent-t);color:var(--accent)}
+.badge{border-radius:999px;padding:5px 10px;font:600 10px/1 var(--m);letter-spacing:.04em;white-space:nowrap}
+.badge.att{background:var(--accent-t3);color:var(--accent-d)}
+.badge.ai{background:var(--line3);color:var(--muted2)}
+.badge.human{background:var(--blue-t);color:var(--blue-d)}
+.badge.ok{background:var(--green-t);color:var(--green-d)}
+.dot{width:6px;height:6px;border-radius:3px;background:var(--green);flex:none}
+.pill-live{display:flex;align-items:center;gap:6px;background:var(--green-t);border-radius:999px;padding:6px 10px;font:600 11px/1 var(--m);color:var(--green-d)}
+.tick{width:18px;height:18px;border-radius:9px;background:var(--green);display:flex;align-items:center;justify-content:center;flex:none}
+
+.darkcard{background:var(--dark);border-radius:22px;padding:20px;display:flex;flex-direction:column;gap:16px;color:#fff}
+.darkcard .kpi{flex:1;background:var(--dark2);border-radius:14px;padding:13px}
+.darkcard .kpi b{font:600 22px/1 var(--m);color:#fff;display:block}
+.darkcard .kpi span{font:400 12px/1.3 var(--f);color:var(--muted3);display:block;padding-top:5px}
+
+.stat{flex:1;background:var(--soft);border:1px solid var(--line);border-radius:18px;padding:15px;display:flex;flex-direction:column;gap:6px}
+.stat b{font:600 26px/1 var(--m)}
+.stat span{font:400 12px/1.3 var(--f);color:var(--muted3)}
+.stat.warm{background:var(--accent-t2);border-color:var(--accent-b)}
+.stat.warm b{color:var(--accent-d)}
+.stat.warm span{color:var(--accent-ink2)}
+
+.drop{border:1px dashed var(--dash);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:5px;transition:.15s}
+.drop:active{background:var(--soft)}
+.drop b{font:600 14px/1 var(--f)}
+.drop span{font:400 12px/1.3 var(--f);color:var(--muted4)}
+
+/* ---------- chat ---------- */
+.bub{max-width:82%;padding:11px 14px;font:400 14px/1.45 var(--f);animation:pop .22s ease}
+@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.bub.out{align-self:flex-end;background:var(--accent);color:#fff;border-radius:16px 16px 5px 16px}
+.bub.in{align-self:flex-start;background:var(--card);border:1px solid var(--line4);border-radius:16px 16px 16px 5px;max-width:84%}
+.bub.in.flat{background:var(--soft2);border:none;color:var(--ink2)}
+.bub.sys{align-self:center;background:var(--accent-t3);border-radius:14px;color:var(--accent-d);font:500 13px/1.4 var(--f);text-align:center;max-width:88%}
+.meta{font:500 11px/1 var(--f);color:var(--muted5)}
+.typing{align-self:flex-start;background:var(--card);border:1px solid var(--line4);border-radius:16px 16px 16px 5px;padding:13px 15px;display:flex;gap:4px}
+.typing i{width:6px;height:6px;border-radius:3px;background:var(--muted6);animation:tp 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes tp{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+.composer{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line2);border-radius:16px;padding:10px 10px 10px 14px}
+.composer input{font:400 14px/1.2 var(--f)}
+.send{width:32px;height:32px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex:none;transition:.12s}
+.send:active{transform:scale(.9)}
+
+/* ---------- inbox rows ---------- */
+.dlg{display:flex;gap:12px;padding:14px 20px;transition:background .12s}
+.dlg:active{background:var(--soft2)}
+.dlg.unread{background:#FFF9F5;border-left:2px solid var(--accent);padding-left:18px}
+.sep{height:1px;background:var(--line3);margin:0 20px}
+
+/* ---------- tabbar ---------- */
+.tabbar{display:flex;justify-content:space-between;align-items:stretch;padding:8px 10px calc(16px + var(--safe-bot));background:var(--card);border-top:1px solid #ECECE8;flex:none}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding-top:6px;position:relative;transition:.12s}
+.tab:active{transform:scale(.93)}
+.tab span{font:500 10px/1 var(--f);letter-spacing:.02em;color:var(--muted4)}
+.tab svg{stroke:var(--muted4)}
+.tab.on span{color:var(--accent)}
+.tab.on svg{stroke:var(--accent)}
+.tab.on svg.fill circle{fill:var(--accent)}
+.tab svg.fill circle{fill:var(--muted4)}
+.tab .bdg{position:absolute;top:2px;left:calc(50% + 6px);min-width:16px;height:16px;border-radius:8px;background:var(--accent);color:#fff;font:700 9px/16px var(--f);text-align:center;padding:0 4px}
+
+/* ---------- bars ---------- */
+.bars{display:flex;align-items:flex-end;gap:5px;height:70px}
+.bars i{flex:1;background:var(--dark3);border-radius:3px;transition:height .5s cubic-bezier(.3,1,.4,1)}
+.bars i.on{background:var(--accent)}
+.track{width:110px;height:6px;border-radius:3px;background:var(--line3);flex:none;overflow:hidden}
+.track i{display:block;height:6px;border-radius:3px;background:var(--accent);transition:width .5s ease}
+.ring{width:46px;height:46px;border-radius:50%;flex:none;background:conic-gradient(var(--accent) var(--p,62%),#E9E6E0 0);position:relative}
+.ring:after{content:'';position:absolute;inset:4px;border-radius:50%;background:var(--soft)}
+.slider{height:4px;border-radius:2px;background:#E9E6E0;position:relative;margin:9px 0}
+.slider i{position:absolute;left:0;top:0;height:4px;border-radius:2px;background:var(--accent)}
+.slider b{position:absolute;top:-7px;width:18px;height:18px;border-radius:9px;background:#fff;border:2px solid var(--accent);margin-left:-9px}
+.slider input{position:absolute;inset:-12px 0;opacity:0;height:28px}
+
+/* ---------- sheet / toast ---------- */
+.scrim{position:absolute;inset:0;background:rgba(20,22,26,.42);z-index:40;opacity:0;pointer-events:none;transition:opacity .24s}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:41;background:var(--card);border-radius:26px 26px 0 0;padding:20px 20px calc(22px + var(--safe-bot));display:flex;flex-direction:column;gap:16px;transform:translateY(102%);transition:transform .3s cubic-bezier(.22,.9,.3,1);max-height:86%;overflow-y:auto}
+.sheet.on{transform:none}
+.sheet .grip{width:38px;height:4px;border-radius:2px;background:var(--line2);align-self:center}
+.toast{position:absolute;left:16px;right:16px;top:calc(12px + var(--safe-top));z-index:60;background:var(--dark);color:#fff;border-radius:15px;padding:14px 16px;font:500 14px/1.4 var(--f);opacity:0;transform:translateY(-10px);pointer-events:none;transition:.24s;box-shadow:0 12px 30px rgba(20,16,10,.28)}
+.toast.on{opacity:1;transform:none}
+
+.skel{background:linear-gradient(90deg,var(--soft2) 25%,#EDEBE6 50%,var(--soft2) 75%);background-size:200% 100%;animation:sk 1.2s infinite}
+@keyframes sk{to{background-position:-200% 0}}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.fade{animation:fd .3s ease}
+@keyframes fd{from{opacity:0}to{opacity:1}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="screens" style="position:relative;flex:1;overflow:hidden"></div>
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet"></div>
+  <div class="toast" id="toast"></div>
+</div>
+<script>
+'use strict';
+/* ============================================================
+   Consul — AI-менеджер для Telegram-бота
+   Telegram Mini App. Одностраничное приложение, состояние в localStorage.
+   ============================================================ */
+
+const TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+const KEY = 'consul_state_v1';
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const now = () => Date.now();
+const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const initials = s => String(s||'').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || '??';
+/** Русские окончания: plural(2,'диалог','диалога','диалогов') */
+function plural(n, one, few, many){
+  const a = Math.abs(n) % 100, b = a % 10;
+  if(a > 10 && a < 20) return many;
+  if(b > 1 && b < 5) return few;
+  if(b === 1) return one;
+  return many;
+}
+
+function haptic(type){
+  try{
+    if(!TG || !TG.HapticFeedback) return;
+    if(type === 'sel') TG.HapticFeedback.selectionChanged();
+    else if(type === 'ok') TG.HapticFeedback.notificationOccurred('success');
+    else if(type === 'warn') TG.HapticFeedback.notificationOccurred('warning');
+    else TG.HapticFeedback.impactOccurred(type || 'light');
+  }catch(e){}
+}
+
+/* ---------- icons ---------- */
+const I = {
+  msg: (c,s) => `<svg width="${s||19}" height="${s||19}" viewBox="0 0 24 24" fill="none" stroke="${c||'#F26722'}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v9.5a2 2 0 0 1-2 2H9l-5 3.5V5.5Z"/></svg>`,
+  user: (c,s) => `<svg width="${s||19}" height="${s||19}" viewBox="0 0 24 24" fill="none" stroke="${c||'#F26722'}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.6 3.9-5.2 7-5.2s5.8 1.6 7 5.2"/></svg>`,
+  trend:(c,s) => `<svg width="${s||19}" height="${s||19}" viewBox="0 0 24 24" fill="none" stroke="${c||'#F26722'}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16.5 9 11.5l3.5 3.5L20 7.5"/><path d="M20 12.5v-5h-5"/></svg>`,
+  bell: (c,s) => `<svg width="${s||18}" height="${s||18}" viewBox="0 0 24 24" fill="none" stroke="${c||'#5F656D'}" stroke-width="1.8" stroke-linecap="round"><path d="M12 4a5.5 5.5 0 0 0-5.5 5.5c0 4-2 5.5-2 5.5h15s-2-1.5-2-5.5A5.5 5.5 0 0 0 12 4Z"/><path d="M10.5 18.5a1.8 1.8 0 0 0 3 0"/></svg>`,
+  search:(c,s)=> `<svg width="${s||16}" height="${s||16}" viewBox="0 0 24 24" fill="none" stroke="${c||'#A5AAB0'}" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg>`,
+  check:(c,s) => `<svg width="${s||11}" height="${s||11}" viewBox="0 0 24 24" fill="none" stroke="${c||'#fff'}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 7"/></svg>`,
+  arrow:(c,s) => `<svg width="${s||16}" height="${s||16}" viewBox="0 0 24 24" fill="none" stroke="${c||'#fff'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h14"/><path d="M13 6.5 18.5 12 13 17.5"/></svg>`,
+  pause:(c,s) => `<svg width="${s||11}" height="${s||11}" viewBox="0 0 24 24" fill="none" stroke="${c||'#F26722'}" stroke-width="2.6" stroke-linecap="round"><path d="M9.5 6v12"/><path d="M14.5 6v12"/></svg>`,
+  spark:(c,s) => `<svg width="${s||17}" height="${s||17}" viewBox="0 0 24 24" fill="none" stroke="${c||'#C9531A'}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.7 8l4.6 1.7-4.6 1.7L12 16l-1.7-4.6L5.7 9.7 10.3 8 12 3.5Z"/></svg>`,
+  home: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3.5l9 7"/><path d="M5.5 9.5V20h13V9.5"/></svg>`,
+  inbox:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v9.5a2 2 0 0 1-2 2H9l-5 3.5V5.5Z"/></svg>`,
+  cl:   `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.6 3.9-5.2 7-5.2s5.8 1.6 7 5.2"/></svg>`,
+  ai:   `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.7 8l4.6 1.7-4.6 1.7L12 16l-1.7-4.6L5.7 9.7 10.3 8 12 3.5Z"/><path d="M18 16.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/></svg>`,
+  more: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="fill"><circle cx="5.5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18.5" cy="12" r="1.5"/></svg>`
+};
+
+/* ---------- каталог, на котором «обучен» AI ---------- */
+const CATALOG = [
+  { n:'Торшер Lumen Arc',        p:12400, tag:'торшер гостиная напольный свет', d:'тёплый свет, диммер, высота 175 см' },
+  { n:'Панель Lumen Office',     p:3200,  tag:'офис панель потолок подвесной', d:'от 10 шт — скидка 7%, нейтральный свет 4000K', bulk:'от 10 шт скидка 7%' },
+  { n:'Лента LED Flex',          p:1890,  tag:'лента подсветка кухня led диодная', d:'цена за метр, блок питания в комплекте' },
+  { n:'Трековая система Track',  p:8700,  tag:'трек трековая шинопровод спот', d:'шинопровод 1 м + 3 спота' },
+  { n:'Люстра Nord Ring',        p:21500, tag:'люстра зал столовая подвес', d:'кольцевая, 60 см, диммируемая' }
+];
+const DELIVERY = { msk:'по Москве бесплатно от 5 000 ₽, курьер 490 ₽', ru:'по России СДЭК 2–5 дней, от 20 000 ₽ бесплатно', kzn:'Казань — 490 ₽, 2–3 дня' };
+
+/* ---------- дефолтное состояние ---------- */
+function seed(){
+  const t = now(), m = 60000;
+  return {
+    v: 1,
+    onboarded: false,
+    step: 0,
+    bot: { token:'', name:'', username:'', subs:0, connected:false },
+    biz: { name:'', site:'', about:'', docs:[] },
+    ai: {
+      name:'Ника', style:'friendly', lang:'RU', length:'short', lengthVal:40,
+      canProducts:true, canContacts:true, canDiscount:false,
+      handoff:['клиент просит менеджера','жалоба'],
+      instructions:'Всегда уточняй высоту потолков и площадь помещения. Предлагай доставку до подъезда.',
+      banned:['политика','скидки > 10%'],
+      paused:false
+    },
+    team: [], depts:['Sales','Support'],
+    knowledge: [],
+    clients: [],
+    dialogs: [],
+    counters: { msgs:0, byAi:0, handed:0 },
+    tab:'home', view:'welcome', openChat:null, period:30,
+    seededAt: t
+  };
+}
+
+/* ---------- демо-данные после онбординга ---------- */
+function demoData(S){
+  const t = now(), m = 60000;
+  S.dialogs = [
+    { id:'d1', name:'Марина С.', full:'Марина Соколова', un:'marina_s', phone:'+7 916 ••• 42 18', status:'attention', stage:'interested',
+      unread:true, ts:t-14*m, interest:'Панели Lumen Office, 20 шт', mgr:'Анна Ковалёва', touches:3,
+      note:'нужен счёт на юрлицо, просила КП до пятницы',
+      summary:'Хочет заказать 20 панелей для офиса, потолки 3 м, бюджет до 200 000 ₽. Ждёт КП и счёт на юрлицо.',
+      msgs:[
+        {r:'user', t:'Здравствуйте, нужны светильники для офиса, 20 штук', ts:t-32*m},
+        {r:'ai',   t:'Здравствуйте! Для офиса подойдут панели Lumen Office — 3 200 ₽ за штуку, при заказе от 10 скидка 7%. Уточните высоту потолков?', ts:t-31*m},
+        {r:'user', t:'3 метра. Нужен счёт на организацию, ИНН пришлю', ts:t-14*m},
+        {r:'sys',  t:'AI передал диалог: запрос счёта и документов', ts:t-14*m}
+      ] },
+    { id:'d2', name:'Игорь П.', full:'Игорь Петров', un:'igor_p', phone:'+7 903 ••• 11 07', status:'ai', stage:'customer',
+      unread:false, ts:t-27*m, interest:'Торшер Lumen Arc', mgr:'—', touches:2, note:'',
+      summary:'Купил торшер Lumen Arc после подбора по бюджету. Доволен, возможен повторный заказ.',
+      msgs:[
+        {r:'user', t:'Есть торшер для гостиной до 15 000?', ts:t-40*m},
+        {r:'ai',   t:'Да, есть три модели в этом бюджете. Самая популярная — Lumen Arc, 12 400 ₽, тёплый свет и диммер. Показать фото и наличие?', ts:t-39*m},
+        {r:'user', t:'Спасибо, беру Lumen Arc', ts:t-27*m}
+      ] },
+    { id:'d3', name:'Елена Л.', full:'Елена Лебедева', un:'elena_l', phone:'+7 925 ••• 88 30', status:'human', stage:'inprogress',
+      unread:false, ts:t-63*m, interest:'Люстра Nord Ring', mgr:'Дмитрий Морозов', touches:4, note:'доставка на адрес офиса',
+      summary:'Заказ оформлен, ждёт доставку. Диалог ведёт Дмитрий.',
+      msgs:[
+        {r:'user', t:'Когда приедет заказ?', ts:t-70*m},
+        {r:'human',t:'Дмитрий: отправил трек-номер', ts:t-63*m, who:'Дмитрий'}
+      ] },
+    { id:'d4', name:'Артём Т.', full:'Артём Тихонов', un:'artem_t', phone:'+7 917 ••• 05 62', status:'closed', stage:'customer',
+      unread:false, ts:t-190*m, interest:'Трековая система', mgr:'—', touches:2, note:'',
+      summary:'Оплатил трековую систему, доставка в работе.',
+      msgs:[
+        {r:'user', t:'Оплатил, жду доставку', ts:t-190*m},
+        {r:'ai',   t:'Спасибо! Заказ передан на сборку, трек-номер придёт сюда же в течение дня.', ts:t-189*m}
+      ] },
+    { id:'d5', name:'Светлана В.', full:'Светлана Волкова', un:'svetlana_v', phone:'+7 909 ••• 74 19', status:'ai', stage:'new',
+      unread:true, ts:t-260*m, interest:'Светодиодная лента', mgr:'—', touches:1, note:'',
+      summary:'Интересуется светодиодной лентой для кухни, уточняет метраж.',
+      msgs:[
+        {r:'user', t:'А есть трек на светодиодную ленту?', ts:t-260*m},
+        {r:'ai',   t:'Есть Лента LED Flex — 1 890 ₽ за метр, блок питания в комплекте. Сколько метров нужно?', ts:t-259*m}
+      ] }
+  ];
+  S.counters = { msgs:148, byAi:136, handed:12 };
+  return S;
+}
+
+/* ---------- store ---------- */
+let S = seed();
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){ const p = JSON.parse(raw); if(p && p.v === 1) S = Object.assign(seed(), p); }
+  }catch(e){}
+}
+let saveT = null;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(()=>{ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }, 120);
+}
+function reset(){ try{ localStorage.removeItem(KEY); }catch(e){} S = seed(); }
+
+/* ============================================================
+   Связь с бэкендом.
+
+   Сервер (consul-server) отдаёт этот файл, подставляя window.CONSUL_CONFIG.
+   Если конфига нет — файл открыт как есть, приложение работает офлайн
+   на локальных данных, как демо. Логика экранов одна и та же.
+   ============================================================ */
+const CFG = window.CONSUL_CONFIG || null;
+const NET = {
+  on: !!CFG,
+  base: CFG ? (CFG.api || location.origin) : '',
+  bot: CFG ? (CFG.bot || '') : '',   // username платформенного бота Consul
+  initData: (TG && TG.initData) || (CFG && CFG.devInitData) || '',
+  ready: false,
+  aiReady: false,
+  me: null,
+  async req(path, body){
+    const res = await fetch(this.base + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-init-data': this.initData },
+      body: JSON.stringify(body || {}),
+    });
+    let data = null;
+    try { data = await res.json(); } catch(e){}
+    if(!res.ok || !data || data.ok === false) throw new Error((data && data.error) || ('сервер ответил ' + res.status));
+    return data;
+  },
+  /** Отправляет файл целиком: разбор PDF/DOCX/XLSX делает сервер. */
+  async upload(file, title){
+    const res = await fetch(this.base + '/api/knowledge/upload', {
+      method: 'POST',
+      headers: {
+        'x-init-data': this.initData,
+        'x-filename': encodeURIComponent(file.name),
+        'content-type': 'application/octet-stream',
+      },
+      body: file,
+    });
+    let data = null;
+    try { data = await res.json(); } catch(e){}
+    if(!res.ok || !data || data.ok === false) throw new Error((data && data.error) || ('сервер ответил ' + res.status));
+    return data;
+  },
+};
+
+function netErr(e){
+  console.error('[net]', e);
+  toast(e && e.message ? e.message : 'Нет связи с сервером');
+}
+function debounce(fn, ms){
+  let t = null;
+  return function(){ clearTimeout(t); t = setTimeout(fn, ms); };
+}
+const pushBiz = debounce(() => { if(NET.on) NET.req('/api/biz', S.biz).catch(netErr); }, 700);
+const pushAI  = debounce(() => { if(NET.on) NET.req('/api/ai', { patch: S.ai }).catch(netErr); }, 500);
+const pushStep = debounce(() => { if(NET.on) NET.req('/api/step', { step: S.step }).catch(()=>{}); }, 800);
+
+/** Переносит состояние с сервера в S, сохраняя форму, которую ждут экраны. */
+function applyState(st){
+  if(!st) return;
+  S.onboarded = st.onboarded;
+  S.step = st.step || 0;
+  S.bot = { token:'', name: st.bot.name, username: st.bot.username, subs: st.bot.subs, connected: st.bot.connected, mask: st.bot.tokenMask };
+  S.biz = Object.assign({ docs: S.biz.docs || [] }, st.biz);
+  S.ai = Object.assign({}, S.ai, st.ai);
+  S.team = st.team || [];
+  S.depts = st.depts || S.depts;
+  S.knowledge = st.knowledge || [];
+  S.dialogs = st.dialogs || [];
+  S.counters = st.counters || S.counters;
+  S.usage = st.usage || null;
+  NET.aiReady = !!st.ai_ready;
+  NET.mode = st.mode;
+  NET.quota = st.quota || null;
+  NET.links = st.links || {};
+  NET.notifyOk = st.notifyOk !== false;
+  save();
+}
+
+/** Точечное обновление одного диалога (приходит по SSE и из ответов API). */
+function applyDialog(d){
+  if(!d) return;
+  const i = S.dialogs.findIndex(x => x.id === d.id);
+  if(i >= 0) S.dialogs[i] = d; else S.dialogs.unshift(d);
+  S.dialogs.sort((a,b) => b.ts - a.ts);
+  save();
+  if(current === 'chat' && S.openChat === d.id) refreshChat();
+  else if(current === 'inbox'){ const n = $('#inboxList'); if(n) n.innerHTML = inboxRows(); repaintBadge(); }
+  else if(current === 'home' || current === 'clients') paint(current, false);
+  else repaintBadge();
+}
+function repaintBadge(){
+  const tab = $('.tab[data-tab="inbox"]'); if(!tab) return;
+  const n = unreadCount(), b = $('.bdg', tab);
+  if(n && b) b.textContent = n;
+  else if(n && !b){ const d = document.createElement('div'); d.className = 'bdg'; d.textContent = n; tab.appendChild(d); }
+  else if(!n && b) b.remove();
+}
+
+/** Живой поток изменений: новые сообщения клиентов приходят сюда. */
+let ES = null;
+function openStream(){
+  if(!NET.on || !NET.initData || ES) return;
+  try {
+    ES = new EventSource(NET.base + '/api/stream?initData=' + encodeURIComponent(NET.initData));
+  } catch(e){ return; }
+  ES.addEventListener('dialog', e => {
+    try {
+      const p = JSON.parse(e.data);
+      if(p.counters) S.counters = p.counters;
+      if(p.usage) S.usage = p.usage;
+      applyDialog(p.dialog || p);
+    } catch(err){}
+  });
+  ES.addEventListener('state', e => { try { applyState(JSON.parse(e.data)); paint(current, false); } catch(err){} });
+  ES.onopen = () => {
+    if(NET.offline){
+      // Связь вернулась — забираем то, что пропустили, пока были офлайн.
+      NET.offline = false;
+      NET.req('/api/state', {}).then(r => { applyState(r.state); paint(current, false); }).catch(()=>{});
+    }
+  };
+  ES.onerror = () => {
+    // EventSource переподключается сам; наше дело — показать, что связи нет.
+    if(ES.readyState === 2 || ES.readyState === 0){
+      if(!NET.offline){ NET.offline = true; if(current === 'home') paint('home', false); }
+    }
+  };
+}
+
+/* ---------- derived ---------- */
+const styleName = k => ({friendly:'Дружелюбный',neutral:'Нейтральный',formal:'Формальный'}[k] || 'Дружелюбный');
+const lenName   = k => ({short:'Короткие',mid:'Средние',long:'Подробные'}[k] || 'Короткие');
+const lenPhrase = v => v < 34 ? '1–2 предложения' : v < 67 ? '2–3 предложения' : '4+ предложения';
+function kbPercent(){
+  const w = { web:30, doc:32, price:18, rules:12, faq:8, text:6 };
+  let p = 0; const seen = {};
+  S.knowledge.forEach(k => { if(k.ready && !seen[k.kind]){ seen[k.kind] = 1; p += (w[k.kind] || 10); } });
+  return Math.min(100, p);
+}
+function unreadCount(){ return S.dialogs.filter(d => d.unread).length; }
+function attentionCount(){ return S.dialogs.filter(d => d.status === 'attention').length; }
+function clientsFromDialogs(){ return S.dialogs; }
+
+/* ---------- AI движок ---------- */
+function findProduct(q){
+  const s = q.toLowerCase();
+  let best = null, score = 0;
+  CATALOG.forEach(p => {
+    let sc = 0;
+    p.tag.split(' ').forEach(w => { if(w.length > 3 && s.includes(w.slice(0, w.length - 1))) sc++; });
+    if(sc > score){ score = sc; best = p; }
+  });
+  const budget = (s.match(/до\s*(\d[\d\s]{2,})/) || [])[1];
+  if(budget && !best){
+    const lim = +budget.replace(/\s/g,'');
+    const fit = CATALOG.filter(p => p.p <= lim).sort((a,b)=>b.p-a.p);
+    if(fit.length) return { p: fit[0], alt: fit.length, budget: lim };
+  }
+  return best ? { p: best, alt:0, budget: budget ? +budget.replace(/\s/g,'') : 0 } : null;
+}
+function tone(txt){
+  if(S.ai.style === 'friendly') return txt;
+  if(S.ai.style === 'neutral')  return txt.replace(/^Здравствуйте! /,'').replace(/ 🙂/,'');
+  return txt.replace(/^Здравствуйте! /,'Добрый день. ').replace(/Покажу/,'Направлю');
+}
+function trim(sentences){
+  const v = S.ai.lengthVal;
+  const n = v < 34 ? 2 : v < 67 ? 3 : 5;
+  return sentences.slice(0, n).join(' ');
+}
+/** Возвращает {text, handoff, reason, source} */
+function aiReply(input){
+  const s = input.toLowerCase();
+  // 1) правила передачи человеку
+  const trig = S.ai.handoff.find(h => {
+    const k = h.toLowerCase();
+    if(k.includes('менеджер')) return /менеджер|человек|оператор|живой/.test(s);
+    if(k.includes('жалоб'))    return /жалоб|верн(у|и)ть|брак|не работает|обман|претенз/.test(s);
+    if(k.includes('счёт')||k.includes('счет')||k.includes('документ')) return /счёт|счет|инн|юрлиц|договор|документ|накладн/.test(s);
+    return s.includes(k.split(' ')[0]);
+  });
+  if(trig) return { handoff:true, reason:trig, text:'Секунду, подключаю менеджера — он ответит здесь же.' };
+  if(/счёт|счет|инн|юрлиц|договор/.test(s)) return { handoff:true, reason:'запрос счёта и документов', text:'Передаю запрос менеджеру — он подготовит счёт.' };
+
+  // 2) запрещённые темы
+  const banned = S.ai.banned.find(b => { const k = b.toLowerCase().split(/[\s>]/)[0]; return k.length > 3 && s.includes(k); });
+  if(banned) return { text: tone('Этот вопрос я не обсуждаю — могу помочь с подбором, ценами и доставкой.'), handoff:false };
+
+  // 3) скидки
+  if(/скидк|дешевле|торг/.test(s)){
+    if(!S.ai.canDiscount) return { handoff:true, reason:'запрос скидки', text:'Про скидку уточню у менеджера — он ответит здесь.' };
+    return { text: tone('Могу дать 5% при заказе от 3 позиций. Оформляем?'), handoff:false };
+  }
+  // 4) доставка
+  if(/доставк|привез|срок|когда придёт|когда придет|отправ/.test(s)){
+    const known = /казан|москв/.test(s);
+    const city = /казан/.test(s) ? DELIVERY.kzn : /москв/.test(s) ? DELIVERY.msk : DELIVERY.ru;
+    const parts = ['Доставка: ' + city + '.', 'Собираем заказ в день оплаты.'];
+    if(!known) parts.push('Подскажите город — посчитаю точнее.');
+    const rules = S.knowledge.find(k => k.kind === 'rules' && k.ready);
+    return { text: tone(trim(parts)), handoff:false, source: rules ? rules.title : null };
+  }
+  // 5) контакты
+  if(S.ai.canContacts && /(\+7|8)\d{9,}|@|почт|телефон/.test(s)){
+    return { text: tone(trim(['Записала контакт, спасибо.','Менеджер свяжется, если понадобится уточнить детали.','Что подобрать?'])), handoff:false };
+  }
+  // 6) товары и цены
+  if(S.ai.canProducts){
+    const f = findProduct(s);
+    if(f){
+      const p = f.p, price = nf(p.p) + ' ₽';
+      const parts = [];
+      if(f.budget) parts.push('В этот бюджет подходит ' + p.n + ' — ' + price + '.');
+      else parts.push(p.n + ' — ' + price + '.');
+      parts.push(p.d.charAt(0).toUpperCase() + p.d.slice(1) + '.');
+      if(p.bulk) parts.push('При заказе ' + p.bulk + '.');
+      parts.push('Показать фото и наличие?');
+      const src = S.knowledge.find(k => k.kind === 'doc') || S.knowledge.find(k => k.kind === 'price');
+      return { text: tone(trim(parts)), handoff:false, source: src ? src.title : 'Каталог' };
+    }
+    if(/есть|наличи|цен|сколько|стои/.test(s)){
+      return { text: tone(trim(['Уточните, что именно ищете — комнату или задачу.','Подберу модель и назову цену сразу.'])), handoff:false };
+    }
+  }
+  // 7) приветствие / общее
+  if(/привет|здравств|добрый|hi|hello/.test(s))
+    return { text: tone(trim(['Здравствуйте! Я ' + S.ai.name + ', помогу с подбором света.','Что ищете — люстру, торшер, подсветку?'])), handoff:false };
+  return { text: tone(trim(['Подскажу по товарам, ценам и доставке.','Опишите задачу — подберу вариант.', 'Если нужен человек — сразу передам менеджеру.'])), handoff:false };
+}
+
+/* ============================================================
+   Навигация
+   ============================================================ */
+const SCREENS = $('#screens');
+const TABS_OF = { home:'home', inbox:'inbox', chat:null, clients:'clients', knowledge:'more', aiset:'ai', analytics:'more', channel:'more', more:'more' };
+const ONB = ['welcome','connect','connected','business','aiwiz','team','test'];
+let stack = [];
+let current = null;
+
+function go(view, opts){
+  opts = opts || {};
+  if(current === view && !opts.force) return;
+  if(!opts.back && current && !ONB.includes(view)) {
+    if(TABS_OF[view] && TABS_OF[current] && TABS_OF[view] !== TABS_OF[current]) stack = [];
+    else if(current !== view) stack.push(current);
+  }
+  if(opts.back) stack.pop();
+  paint(view, !!opts.back);
+}
+
+function back(){
+  if(current === 'team' && teamEdit){ teamEdit = false; paint('more', true); return; }
+  if(ONB.includes(current)){
+    const i = ONB.indexOf(current);
+    if(i > 0){ S.step = Math.max(0, i - 1); save(); paint(ONB[i-1], true); return; }
+  }
+  const prev = stack.pop();
+  paint(prev || (S.onboarded ? 'home' : 'welcome'), true);
+}
+
+function paint(view, isBack){
+  current = view; S.view = view; save();
+  const fn = VIEWS[view];
+  if(!fn) return;
+  SCREENS.innerHTML = '';
+  const el = document.createElement('div');
+  el.className = 'view active' + (isBack ? ' back' : '');
+  el.id = 'v-' + view;
+  el.innerHTML = fn();
+  SCREENS.appendChild(el);
+  if(MOUNT[view]) MOUNT[view](el);
+  const b = $('.body', el); if(b) b.scrollTop = 0;
+  syncBackButton();
+}
+
+function syncBackButton(){
+  if(!TG || !TG.BackButton) return;
+  const rootish = ['home','inbox','clients','aiset','more','welcome'].includes(current);
+  try{ rootish ? TG.BackButton.hide() : TG.BackButton.show(); }catch(e){}
+}
+
+/* ---------- tabbar ---------- */
+function tabbar(active){
+  const u = unreadCount();
+  const t = (id, icon, label) => `<button class="tab${active===id?' on':''}" data-tab="${id}">${icon}<span>${label}</span>${id==='inbox'&&u?`<div class="bdg">${u}</div>`:''}</button>`;
+  return `<div class="tabbar">
+    ${t('home', I.home,'Home')}${t('inbox', I.inbox,'Inbox')}${t('clients', I.cl,'Clients')}${t('ai', I.ai,'AI')}${t('more', I.more,'More')}
+  </div>`;
+}
+const TAB_VIEW = { home:'home', inbox:'inbox', clients:'clients', ai:'aiset', more:'more' };
+
+/* ---------- sheet / toast ---------- */
+const SHEET = $('#sheet'), SCRIM = $('#scrim'), TOAST = $('#toast');
+let sheetOnClose = null;
+function sheet(html, onMount){
+  SHEET.innerHTML = `<div class="grip"></div>` + html;
+  SHEET.classList.add('on'); SCRIM.classList.add('on');
+  if(onMount) onMount(SHEET);
+  haptic('light');
+}
+function closeSheet(){ SHEET.classList.remove('on'); SCRIM.classList.remove('on'); if(sheetOnClose){ const f = sheetOnClose; sheetOnClose = null; f(); } }
+SCRIM.addEventListener('click', closeSheet);
+let toastT;
+function toast(msg){
+  TOAST.textContent = msg; TOAST.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(()=>TOAST.classList.remove('on'), 2400);
+}
+
+/* ---------- переиспользуемые куски ---------- */
+function topbar(title, right, noBack){
+  return `<div class="topbar">
+    <div class="l" data-act="back" style="${noBack?'visibility:hidden':''}">Назад</div>
+    <div class="t">${esc(title)}</div>
+    <div class="r">${right || ''}</div>
+  </div>`;
+}
+function steps(n){ return `<div class="steps">${[1,2,3,4,5].map(i=>`<i class="${i<=n?'on':''}"></i>`).join('')}</div>`; }
+function botCard(){
+  const b = S.bot;
+  return `<div class="row g14">
+    <div class="av warm" style="width:56px;height:56px;border-radius:18px;font-size:19px">${esc(initials(b.name))}</div>
+    <div class="col g4"><div style="font:600 18px/1 var(--f)">${esc(b.name)}</div>
+    <div style="font:500 14px/1 var(--m);color:var(--muted3)">@${esc(b.username)}</div></div>
+  </div>`;
+}
+function statusBadge(st){
+  if(st === 'attention') return `<div class="badge att">NEEDS ATTENTION</div>`;
+  if(st === 'human')     return `<div class="badge human">HUMAN</div>`;
+  if(st === 'closed')    return `<div class="badge ok">CLOSED</div>`;
+  return `<div class="badge ai">AI</div>`;
+}
+
+/* ============================================================
+   Экраны
+   ============================================================ */
+const VIEWS = {}, MOUNT = {};
+
+/* ---------- 00 Welcome ---------- */
+VIEWS.welcome = () => `
+<div class="body" style="background:linear-gradient(180deg,#FFF4EC 0%,#FFFFFF 62%)">
+  <div style="padding:calc(40px + var(--safe-top)) 26px 26px;display:flex;flex-direction:column;flex:1">
+    <div class="row g10">
+      <div style="width:30px;height:30px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;font:700 14px/1 var(--m);color:#fff">C</div>
+      <div style="font:600 16px/1 var(--f);letter-spacing:-.01em">Consul</div>
+    </div>
+    <div style="margin-top:40px" class="col g16">
+      <div class="h1">Ваш бот станет<br>AI-менеджером</div>
+      <div style="font:400 16px/1.5 var(--f);color:#6E747C;text-wrap:pretty">Мы подключаем вашего Telegram-бота и он начинает сам отвечать клиентам: консультирует, собирает контакты и передаёт сложное живому менеджеру.</div>
+    </div>
+    <div style="margin-top:30px" class="col g10">
+      ${[[I.msg(),'Отвечает круглосуточно','Клиент не ждёт ответа до утра'],
+         [I.user(),'Собирает заявки и контакты','Каждый диалог становится карточкой клиента'],
+         [I.trend(),'Передаёт менеджеру вовремя','Вы решаете, когда нужен человек']]
+        .map(([ic,t,d])=>`<div class="box" style="border-radius:16px;display:flex;gap:13px;align-items:center">
+          <div class="av warm" style="width:38px;height:38px;border-radius:11px">${ic}</div>
+          <div class="col g4"><div style="font:600 15px/1.2 var(--f)">${t}</div><div style="font:400 13px/1.35 var(--f);color:var(--muted3)">${d}</div></div>
+        </div>`).join('')}
+    </div>
+    <div class="push col g12" style="padding-top:26px">
+      <div style="font:400 13px/1.4 var(--f);color:var(--muted4);text-align:center">Настройка занимает около 3 минут. Разработчик не нужен.</div>
+      <button class="btn" data-act="start">Начать настройку</button>
+      ${S.onboarded ? `<button class="link" data-act="skip-onb">Вернуться в приложение</button>` : ''}
+    </div>
+  </div>
+</div>`;
+
+/* ---------- 01 Connect ---------- */
+VIEWS.connect = () => `
+${topbar('Connect your bot','1/5')}
+<div class="body"><div class="pad g20">
+  ${steps(1)}
+  <div class="col g9">
+    <div class="h2">Подключите бота</div>
+    <div class="sub">Вставьте токен из BotFather — мы проверим доступ и заберём аватар и название.</div>
+  </div>
+  <div class="field">
+    <div class="lbl">Bot token</div>
+    <div class="inp mono" id="tokwrap"><input id="tok" inputmode="text" autocomplete="off" spellcheck="false" placeholder="1234567890:AAF-xxxxxxxxxxxx" value="${esc(S.bot.token)}"></div>
+    <div class="hint" id="tokhint">Токен хранится в зашифрованном виде и виден только вам.</div>
+  </div>
+  <div class="box" style="display:flex;align-items:center;gap:13px" data-act="botfather">
+    <div class="av warm" style="width:38px;height:38px;border-radius:12px">${I.msg(null,18)}</div>
+    <div class="f1 col g4">
+      <div style="font:500 14px/1.35 var(--f);color:var(--ink3)">Токен даёт @BotFather в Telegram</div>
+      <div class="cap2">Откроем и покажем, что нажать</div>
+    </div>
+    <div class="a15">Открыть</div>
+  </div>
+  <div id="found"></div>
+  <div class="push col g10">
+    <button class="btn" id="connectBtn" data-act="connect">Подключить бота</button>
+    <button class="link" data-act="nobot">У меня ещё нет бота</button>
+  </div>
+</div></div>`;
+
+MOUNT.connect = el => {
+  const inp = $('#tok', el), wrap = $('#tokwrap', el), found = $('#found', el), hint = $('#tokhint', el);
+  const valid = v => /^\d{6,12}:[A-Za-z0-9_\-]{20,}$/.test(v.trim());
+  let t = null;
+  const check = () => {
+    const v = inp.value.trim();
+    found.innerHTML = ''; wrap.classList.remove('err'); hint.classList.remove('err');
+    hint.textContent = 'Токен хранится в зашифрованном виде и виден только вам.';
+    if(!v) return;
+    if(!valid(v)){
+      if(v.length > 12){ wrap.classList.add('err'); hint.classList.add('err'); hint.textContent = 'Похоже, токен неполный. Формат: 1234567890:AA…'; }
+      return;
+    }
+    if(NET.on){
+      // Настоящую проверку делает сервер через getMe — не показываем выдуманного бота.
+      hint.textContent = 'Формат верный. Проверим доступ и заберём имя бота при подключении.';
+      return;
+    }
+    found.innerHTML = `<div class="box plain skel" style="height:76px;border-radius:18px"></div>`;
+    clearTimeout(t);
+    t = setTimeout(()=>{
+      const name = S.biz.name || 'Nordlight Store';
+      const un = (name.toLowerCase().replace(/[^a-zа-я0-9]+/gi,'_').replace(/^_|_$/g,'') || 'my') + '_bot';
+      S.bot.name = name; S.bot.username = un.length > 24 ? 'nordlight_bot' : un;
+      S.bot.subs = 1248; save();
+      found.innerHTML = `<div class="box plain fade" style="border-radius:18px;display:flex;align-items:center;gap:13px">
+        <div class="av warm" style="width:44px;height:44px">${esc(initials(name))}</div>
+        <div class="f1 col g4"><div style="font:600 15px/1 var(--f)">${esc(name)}</div>
+          <div style="font:500 13px/1 var(--m);color:var(--muted3)">@${esc(S.bot.username)}</div></div>
+        <div class="pill-live">НАЙДЕН</div></div>`;
+      haptic('ok');
+    }, 700);
+  };
+  inp.addEventListener('input', () => { S.bot.token = inp.value; save(); check(); });
+  check();
+};
+
+/* ---------- 01b Connected ---------- */
+VIEWS.connected = () => `
+${topbar('Connect your bot','1/5')}
+<div class="body"><div class="pad g20">
+  ${steps(1)}
+  <div class="h2">Бот подключён</div>
+  <div class="box" style="border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:16px">
+    ${botCard()}
+    <div style="height:1px;background:var(--line5)"></div>
+    <div class="between"><div style="font:400 14px/1 var(--f);color:var(--muted3)">Статус</div>
+      <div style="display:flex;align-items:center;gap:7px;background:var(--green-t);border-radius:999px;padding:6px 11px">
+        <div class="dot" style="width:7px;height:7px"></div>
+        <div style="font:600 11px/1 var(--m);letter-spacing:.06em;color:var(--green-d)">CONNECTED</div></div></div>
+    <div class="between"><div style="font:400 14px/1 var(--f);color:var(--muted3)">Webhook</div><div style="font:500 14px/1 var(--f)">Активен</div></div>
+    <div class="between"><div style="font:400 14px/1 var(--f);color:var(--muted3)">Подписчиков</div><div style="font:500 14px/1 var(--f)">${nf(S.bot.subs)}</div></div>
+  </div>
+  <div class="box warm" style="border-radius:16px">Клиенты по-прежнему пишут в вашего бота — ничего переносить не нужно.</div>
+  <div class="push col g10">
+    <button class="btn" data-act="to-business">Продолжить</button>
+    <button class="link" data-act="rebot">Подключить другого бота</button>
+  </div>
+</div></div>`;
+
+/* ---------- 02 About business ---------- */
+VIEWS.business = () => `
+${topbar('About your business','2/5')}
+<div class="body"><div class="pad">
+  ${steps(2)}
+  <div class="col g8"><div class="h2">Расскажите о компании</div>
+    <div class="sub">На этом AI будет строить ответы. Можно коротко — детали добавим потом.</div></div>
+  <div class="col g12">
+    <div class="field"><div class="lbl">Название</div>
+      <div class="inp"><input id="bizName" placeholder="Nordlight Store" value="${esc(S.biz.name)}"></div></div>
+    <div class="field"><div class="lbl">Сайт</div>
+      <div class="inp"><input id="bizSite" inputmode="url" autocapitalize="off" placeholder="nordlight.ru" value="${esc(S.biz.site)}">
+        <span class="a none" data-act="import-site">Импортировать</span></div></div>
+    <div class="field"><div class="lbl">Чем занимаетесь</div>
+      <div class="inp"><textarea id="bizAbout" rows="3" placeholder="Продаём светильники и решения для освещения дома…">${esc(S.biz.about)}</textarea></div></div>
+  </div>
+  <div class="col g9">
+    <div class="lbl">Материалы для AI</div>
+    <div class="row wrap g9">
+      ${[['file','+ Файл'],['price','+ Прайс'],['faq','+ FAQ'],['link','+ Ссылка']].map(([k,l])=>
+        `<button class="drop" style="border-radius:13px;padding:12px 14px;font:500 14px/1 var(--f);color:var(--muted)" data-act="add-mat" data-kind="${k}">${l}</button>`).join('')}
+    </div>
+    <div class="col g9" id="mats">${matList()}</div>
+  </div>
+  <div class="push" style="padding-top:20px"><button class="btn" data-act="to-aiwiz">Далее</button></div>
+</div></div>`;
+
+function matList(){
+  if(!S.biz.docs.length) return '';
+  return S.biz.docs.map((d,i)=>`<div class="box" style="border-radius:13px;padding:13px 14px">
+    <div class="between">
+      <div class="row g11">
+        <div class="av warm" style="width:32px;height:32px;border-radius:9px;font-size:10px">${esc(d.type)}</div>
+        <div class="col g4"><div style="font:500 14px/1 var(--f)">${esc(d.name)}</div>
+          <div class="cap2">${esc(d.meta)}</div></div>
+      </div>
+      ${d.ready ? `<div class="tick">${I.check()}</div>` : `<div class="cap2">обработка…</div>`}
+    </div></div>`).join('');
+}
+
+MOUNT.business = el => {
+  const bind = (id, key) => { const n = $('#'+id, el); if(n) n.addEventListener('input', () => { S.biz[key] = n.value; save(); pushBiz(); }); };
+  bind('bizName','name'); bind('bizSite','site'); bind('bizAbout','about');
+};
+
+/* ---------- 03 AI Manager (wizard) ---------- */
+VIEWS.aiwiz = () => `
+${topbar('AI Manager','3/5')}
+<div class="body"><div class="pad">
+  ${steps(3)}
+  <div class="col g8"><div class="h2">Как AI будет общаться</div>
+    <div class="sub">Четыре настройки. Остальное можно поменять позже.</div></div>
+  <div class="col g9"><div class="lbl">Стиль</div>
+    <div class="seg" data-group="style">
+      ${[['friendly','Дружелюбный'],['neutral','Нейтральный'],['formal','Формальный']].map(([k,l])=>
+        `<button class="${S.ai.style===k?'on':''}" data-act="set-style" data-v="${k}">${l}</button>`).join('')}
+    </div></div>
+  <div class="row g10" style="align-items:stretch">
+    <div class="f1 field"><div class="lbl">Язык</div>
+      <button class="inp" data-act="pick-lang">${S.ai.lang === 'RU' ? 'Русский' : S.ai.lang === 'EN' ? 'English' : 'RU + EN'}<span style="color:var(--muted6)">▾</span></button></div>
+    <div class="f1 field"><div class="lbl">Ответы</div>
+      <button class="inp" data-act="pick-len">${lenName(S.ai.length)}<span style="color:var(--muted6)">▾</span></button></div>
+  </div>
+  <div class="col g9"><div class="lbl">AI может сам</div>
+    <div class="list" style="padding:4px 14px">
+      ${[['canProducts','Отвечать о товарах и ценах'],['canContacts','Собирать телефон и имя'],['canDiscount','Давать скидки']].map(([k,l])=>
+        `<div class="between" style="padding:13px 0"><div style="font:500 15px/1 var(--f)">${l}</div>
+          <button class="sw ${S.ai[k]?'on':''}" data-act="toggle-ai" data-k="${k}"><i></i></button></div>`).join('')}
+    </div></div>
+  <div class="col g9"><div class="lbl">Передать человеку, если</div>
+    <div class="row wrap g8" id="handoffs">${handoffChips()}</div></div>
+  <div class="push" style="padding-top:18px"><button class="btn" data-act="to-team">Далее</button></div>
+</div></div>`;
+
+function handoffChips(){
+  return S.ai.handoff.map((h,i)=>`<button class="chip tag" data-act="rm-handoff" data-i="${i}">${esc(h)} ×</button>`).join('')
+    + `<button class="chip add" data-act="add-handoff">+ добавить</button>`;
+}
+
+/* ---------- 04 Team (шаг мастера и отдельный экран из More) ---------- */
+let teamEdit = false;
+VIEWS.team = () => `
+${topbar('Team', teamEdit ? '' : '4/5')}
+<div class="body"><div class="pad">
+  ${teamEdit ? '' : steps(4)}
+  <div class="col g8"><div class="h2">Кому передавать диалоги</div>
+    <div class="sub">${teamEdit ? 'Менеджеры получают диалог, который AI передал человеку.' : 'Добавьте менеджеров по их Telegram-username. Можно пропустить.'}</div></div>
+  <div class="list" id="teamList" style="padding:6px 16px">${teamRows()}</div>
+  <div class="col g9"><div class="lbl">Отделы</div>
+    <div class="row g8" id="deptRow">${deptCards()}</div></div>
+  <div class="box warm" style="border-radius:16px">Менеджеры получат уведомление в Telegram, когда AI передаст диалог.</div>
+  <div class="push col g10" style="padding-top:16px">
+    ${teamEdit ? `<button class="btn" data-act="team-done">Готово</button>`
+               : `<button class="btn" data-act="to-test">Далее</button>
+                  <button class="link" data-act="solo">Я работаю один</button>`}
+  </div>
+</div></div>`;
+
+function teamRows(){
+  return S.team.map((m,i)=>`<div class="row g13">
+      <div class="av ${i===0?'warm':''}" style="width:40px;height:40px;border-radius:13px">${esc(initials(m.name))}</div>
+      <div class="f1 col g4" style="min-width:0"><div style="font:600 15px/1 var(--f)">${esc(m.name)}</div>
+        <div class="cap" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.un ? '@' + esc(m.un) + ' · ' : ''}${esc(m.role)}${NET.on && m.linked === false ? ' · ждёт подтверждения' : ''}</div></div>
+      <button class="chip" style="background:var(--line4);padding:6px 11px;font-size:12px" data-act="mgr-dept" data-i="${i}">${esc(m.dept)}</button>
+    </div>`).join('') +
+  `<button class="row g13" style="width:100%" data-act="add-mgr">
+      <div style="width:40px;height:40px;border-radius:13px;border:1px dashed var(--dash);color:var(--muted6);font:500 20px/38px var(--f);text-align:center">+</div>
+      <div class="a15">Добавить менеджера</div></button>`;
+}
+function deptCards(){
+  return S.depts.map(d=>{
+    const n = S.team.filter(m=>m.dept===d).length;
+    return `<div class="box plain" style="flex:1;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:5px">
+      <div style="font:600 14px/1 var(--f)">${esc(d)}</div><div class="cap2">${n} ${plural(n,'человек','человека','человек')}</div></div>`;
+  }).join('') + `<button class="drop" style="flex:1;border-radius:14px;padding:14px;align-items:center;justify-content:center;font:500 13px/1 var(--f);color:var(--muted4)" data-act="add-dept">+ Other</button>`;
+}
+
+/* ---------- 05 Test → Ready ---------- */
+VIEWS.test = () => `
+${topbar('Test','5/5')}
+<div class="body" style="background:linear-gradient(180deg,#FFFFFF 0%,#FFF6EF 100%)"><div class="pad g20">
+  ${steps(5)}
+  <div class="col g8"><div class="h2">Проверим, как отвечает</div>
+    <div class="sub">Напишите боту как клиент — ответ придёт сразу.</div></div>
+  <div class="box plain" style="border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:12px">
+    <div class="row g12">
+      <div class="av warm" style="width:44px;height:44px;font-size:15px">${S.bot.connected ? esc(initials(S.bot.name)) : '—'}</div>
+      <div class="f1 col g4"><div class="h5">${S.bot.connected ? esc(S.bot.name) : 'Бот не подключён'}</div>
+        <div style="font:500 13px/1 var(--m);color:var(--muted3)">${S.bot.connected ? '@' + esc(S.bot.username) : 'ответы проверим здесь, в приложении'}</div></div>
+      ${S.bot.connected ? `<div class="pill-live"><div class="dot"></div>LIVE</div>` : `<div class="badge ai">DRAFT</div>`}
+    </div>
+    <div style="height:1px;background:var(--line4)"></div>
+    <div class="col g9" id="testFeed" style="min-height:120px"></div>
+    <div class="row wrap g7" id="testSuggest">
+      ${['Есть торшер до 15 000?','Сколько стоит доставка в Казань?','Позовите менеджера'].map(q=>
+        `<button class="chip" data-act="test-q" data-q="${esc(q)}">${esc(q)}</button>`).join('')}
+    </div>
+    <div class="composer"><input id="testInp" placeholder="Напишите как клиент…">
+      <button class="send" data-act="test-send">${I.arrow()}</button></div>
+  </div>
+  <div class="box plain" style="border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:13px">
+    <div class="h5">${checklist().every(c=>c[0]) ? 'Всё готово' : 'Осталось доделать'}</div>
+    ${checklist().map(([done,t])=>`<div class="row g10">
+      ${done ? `<div class="tick">${I.check()}</div>`
+             : `<div style="width:18px;height:18px;border-radius:9px;border:1.5px solid var(--dash);flex:none"></div>`}
+      <div style="font:400 14px/1.3 var(--f);color:${done ? 'var(--ink3)' : 'var(--muted4)'}">${esc(t)}</div></div>`).join('')}
+  </div>
+  <div class="push col g10">
+    <button class="btn" data-act="focus-test">Протестировать AI</button>
+    <button class="btn ghost" data-act="finish">Перейти на главный экран</button>
+  </div>
+</div></div>`;
+
+/** Честный чек-лист готовности: считаем по фактическому состоянию. */
+function checklist(){
+  const kb = S.knowledge.filter(k => k.ready).length;
+  const linked = NET.on ? S.team.filter(m => m.linked).length : S.team.length;
+  return [
+    [!!S.bot.connected, S.bot.connected ? 'Бот @' + S.bot.username + ' подключён' : 'Бот пока не подключён'],
+    [kb > 0, kb ? 'AI знает ' + kb + ' ' + plural(kb,'источник','источника','источников') : 'База знаний пустая — AI не сможет отвечать по фактам'],
+    [linked > 0, linked ? linked + ' ' + plural(linked,'человек получает','человека получают','человек получают') + ' передачи' : 'Передачи пока некому получать'],
+    [NET.on ? NET.aiReady : true, NET.on ? (NET.aiReady ? 'Модель подключена' : 'Модель не настроена на сервере') : 'Демо-режим: ответы по локальным правилам'],
+  ];
+}
+
+let testLog = [];
+MOUNT.test = el => {
+  const feed = $('#testFeed', el);
+  // Офлайн-демо начинает с готового диалога. С бэкендом каждый ответ — реальный
+  // вызов модели, поэтому ждём, пока владелец сам напишет или нажмёт подсказку.
+  if(!testLog.length && !NET.on) testLog = [{ r:'user', t:'Здравствуйте! Есть торшер для гостиной до 15 000?' }];
+  renderTestFeed(feed, true);
+  $('#testInp', el).addEventListener('keydown', e => { if(e.key === 'Enter') testSend(); });
+};
+function renderTestFeed(feed, replayLast){
+  if(!testLog.length){
+    feed.innerHTML = `<div class="cap" style="text-align:center;padding:18px 6px">Напишите боту как клиент — или выберите вопрос ниже.</div>`;
+    return;
+  }
+  feed.innerHTML = testLog.map(m => m.r === 'user'
+    ? `<div class="bub out">${esc(m.t)}</div>`
+    : `<div class="bub in flat">${esc(m.t)}</div>` + (m.ms ? `<div class="row g6" style="padding-left:4px">
+        <div style="width:5px;height:5px;border-radius:3px;background:var(--accent)"></div>
+        <div style="font:500 12px/1 var(--f);color:var(--muted4)">Ответил AI · ${m.ms} сек${m.src ? ' · источник: ' + esc(m.src) : ''}${m.model ? ' · ' + esc(m.model) : ''}</div></div>` : '')).join('');
+  if(replayLast && testLog.length === 1 && !testLog[0].asked){ testLog[0].asked = true; setTimeout(()=>testAnswer(testLog[0].t), 500); }
+  feed.scrollTop = feed.scrollHeight;
+}
+async function testAnswer(q){
+  const feed = $('#testFeed'); if(!feed) return;
+  const typ = document.createElement('div'); typ.className = 'typing'; typ.innerHTML = '<i></i><i></i><i></i>';
+  feed.appendChild(typ);
+  feed.scrollTop = feed.scrollHeight;
+
+  if(NET.on){
+    try {
+      const r = await NET.req('/api/ai/test', { text: q, reset: testLog.length <= 1 });
+      testLog.push({
+        r: 'ai', t: r.reply,
+        src: r.handoff ? null : (r.sources && r.sources[0]) || null,
+        ms: r.fallback ? null : (r.ms / 1000).toFixed(1),
+        model: r.fallback ? '' : (r.model || ''),
+      });
+      if(r.fallback) testLog.push({ r:'ai', t:'⚠️ AI недоступен' + (r.error ? ': ' + r.error : '') + '. Диалог ушёл человеку — выдумывать ответ бот не станет.' });
+      else if(r.handoff) testLog.push({ r:'ai', t:'⚡ Диалог передан менеджеру' + (r.reason ? ' — ' + r.reason : '') });
+      renderTestFeed(feed); haptic('light');
+    } catch(e){
+      if(typ.parentElement) typ.remove();
+      netErr(e);
+    }
+    return;
+  }
+
+  setTimeout(()=>{
+    const r = aiReply(q);
+    testLog.push({ r:'ai', t:r.text, src: r.handoff ? null : (r.source || null), ms:(0.8 + Math.random()*0.9).toFixed(1) });
+    if(r.handoff) testLog.push({ r:'ai', t:'⚡ Диалог передан менеджеру — правило: «' + r.reason + '»' });
+    renderTestFeed(feed);
+    haptic('light');
+  }, 900);
+}
+function testSend(q){
+  const inp = $('#testInp');
+  const text = (q || (inp ? inp.value : '')).trim();
+  if(!text) return;
+  if(inp) inp.value = '';
+  testLog.push({ r:'user', t:text });
+  renderTestFeed($('#testFeed'));
+  testAnswer(text);
+}
+
+/* ---------- Home / Dashboard ---------- */
+VIEWS.home = () => {
+  const c = S.counters, rate = c.msgs ? Math.round(c.byAi / c.msgs * 100) : 0;
+  const recent = S.dialogs.slice().sort((a,b)=>b.ts-a.ts).slice(0,3);
+  const newCl = NET.on ? S.dialogs.filter(d=>d.stage==='new').length : S.dialogs.filter(d=>d.stage==='new').length + 8;
+  const active = S.dialogs.filter(d=>d.status!=='closed').length;
+  return `
+<div class="body"><div class="pad-core">
+  ${statusBanner()}
+  <div class="between">
+    <div class="col g4"><div class="cap" style="font-size:13px">${esc(S.biz.name || S.bot.name)}</div><div class="h4">Сегодня</div></div>
+    <button class="row" style="width:38px;height:38px;border-radius:12px;background:var(--soft);border:1px solid var(--line);justify-content:center;position:relative" data-act="notif">
+      ${I.bell()}${attentionCount()?`<div style="position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:4px;background:var(--accent);border:1.5px solid var(--card)"></div>`:''}
+    </button>
+  </div>
+
+  <div class="darkcard">
+    <div class="between">
+      <div class="row g9"><div style="width:8px;height:8px;border-radius:4px;background:${S.ai.paused?'#F26722':'var(--green-l)'}"></div>
+        <div style="font:600 15px/1 var(--f);color:#fff">AI Manager · ${S.ai.paused?'Paused':'Active'}</div></div>
+      <button style="font:500 13px/1 var(--f);color:var(--accent)" data-act="toggle-pause">${S.ai.paused?'Включить':'Пауза'}</button>
+    </div>
+    <div style="font:400 14px/1.45 var(--f);color:var(--dark-mut)">${S.ai.paused
+      ? 'AI на паузе — все новые диалоги идут менеджерам.'
+      : !S.bot.connected ? 'Бот не подключён — отвечать пока некому.'
+      : 'Отвечает от имени @' + esc(S.bot.username) + '. Последний ответ ' + lastAgo() + '.'}</div>
+    <div class="row g10">
+      <div class="kpi"><b>${rate}%</b><span>решено без человека</span></div>
+      <div class="kpi"><b>${avgReply()}</b><span>средний ответ</span></div>
+    </div>
+  </div>
+
+  <div class="row g10">
+    <button class="stat" data-act="tab" data-tab="inbox"><b>${c.msgs}</b><span>сообщений</span></button>
+    <div class="stat"><b>${c.byAi}</b><span>AI ответил сам</span></div>
+    <button class="stat warm" data-act="filter-att"><b>${c.handed}</b><span>передано</span></button>
+  </div>
+  <div class="cap" style="font-size:13px">${newCl} ${plural(newCl,'новый клиент','новых клиента','новых клиентов')} · ${active} ${plural(active,'активный диалог','активных диалога','активных диалогов')}</div>
+
+  <div class="col g10">
+    <div class="between"><div class="h5">Последние диалоги</div>
+      <button class="a" data-act="tab" data-tab="inbox">Все</button></div>
+    ${!recent.length ? `<div class="box plain" style="border-radius:18px;padding:22px;text-align:center">
+      <div class="cap">Пока ни одного диалога.${S.bot.connected ? ' Напишите своему боту сами — увидите разговор здесь.' : ''}</div></div>` : ''}
+    ${recent.map(d=>`<button class="row g12" style="width:100%" data-act="chat" data-id="${d.id}">
+      <div class="av ${d.status==='attention'?'warm':''}" style="width:42px;height:42px">${esc(initials(d.full))}</div>
+      <div class="f1 col g4" style="text-align:left">
+        <div style="font:600 15px/1 var(--f)">${esc(d.name)}</div>
+        <div style="font:400 13px/1.2 var(--f);color:var(--muted4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${esc(lastLine(d))}</div>
+      </div>${statusBadge(d.status)}</button>`).join('')}
+  </div>
+</div></div>
+${tabbar('home')}`;
+};
+/** Предупреждение, когда что-то мешает боту отвечать по-настоящему. */
+function statusBanner(){
+  if(!NET.on) return '';
+  if(!NET.ready || NET.offline) return warnBox('Нет связи с сервером', 'Показываю последнее сохранённое состояние. Новые сообщения появятся, когда связь вернётся.');
+  if(!S.bot.connected) return warnBox('Бот не подключён', 'Клиенты пока не могут написать. Подключите бота в настройке.', 'restart');
+  if(!NET.aiReady) return warnBox('AI выключен на сервере', 'Не задан GROQ_API_KEY — все диалоги уходят менеджеру, а не боту.');
+  if(NET.notifyOk === false && NET.bot)
+    return warnBox('Вы не получите уведомления', 'Нажмите Start у @' + NET.bot + ', иначе бот не сможет написать вам о переданных диалогах.', 'open-bot');
+  if(NET.quota && NET.quota.dailyLimit && NET.quota.usedToday >= NET.quota.dailyLimit)
+    return warnBox('Дневной лимит ответов исчерпан', 'Использовано ' + NET.quota.usedToday + ' из ' + NET.quota.dailyLimit + '. До завтра диалоги идут менеджерам.');
+  return '';
+}
+function warnBox(title, text, act){
+  return `<${act ? 'button' : 'div'} class="box warm" style="border-radius:16px;display:flex;flex-direction:column;gap:5px;width:100%;text-align:left"${act ? ` data-act="${act}"` : ''}>
+    <div style="font:600 14px/1 var(--f);color:var(--accent-ink)">${esc(title)}</div>
+    <div style="font:400 13px/1.4 var(--f);color:var(--accent-ink2)">${esc(text)}</div>
+  </${act ? 'button' : 'div'}>`;
+}
+
+function lastLine(d){
+  const m = d.msgs[d.msgs.length-1]; if(!m) return '';
+  if(m.r === 'human') return m.t;
+  if(m.r === 'sys') return m.t;
+  return m.t;
+}
+/** Среднее время ответа AI по фактическим замерам. */
+function avgReply(){
+  if(!NET.on) return '1.4с';
+  const t = [];
+  S.dialogs.forEach(d => d.msgs.forEach(m => { if(m.ms) t.push(m.ms); }));
+  if(!t.length) return '—';
+  return (t.reduce((a,b)=>a+b,0) / t.length / 1000).toFixed(1) + 'с';
+}
+
+function lastAgo(){
+  const t = S.dialogs.reduce((a,d)=>Math.max(a, d.ts), 0);
+  if(!t) return 'пока никто не писал';
+  const s = Math.max(1, Math.round((now()-t)/1000));
+  if(s < 60) return s + ' сек назад';
+  if(s < 90) return s + ' секунд назад';
+  const m = Math.round(s/60); if(m < 60) return m + ' мин назад';
+  return Math.round(m/60) + ' ч назад';
+}
+
+/* ---------- Inbox ---------- */
+let inboxFilter = 'all', inboxQuery = '';
+VIEWS.inbox = () => {
+  const counts = {
+    all: S.dialogs.length,
+    attention: S.dialogs.filter(d=>d.status==='attention').length,
+    ai: S.dialogs.filter(d=>d.status==='ai').length,
+    human: S.dialogs.filter(d=>d.status==='human').length,
+    closed: S.dialogs.filter(d=>d.status==='closed').length
+  };
+  const chips = [['all','Все',counts.all],['attention','Needs attention',counts.attention],['ai','AI',counts.ai],['human','Human',counts.human],['closed','Closed',counts.closed]];
+  return `
+<div class="body" style="padding:0">
+  <div style="padding:calc(26px + var(--safe-top)) 20px 14px;display:flex;flex-direction:column;gap:16px">
+    <div class="between" style="align-items:baseline">
+      <div class="h3">Inbox</div>
+      <div style="font:500 13px/1 var(--f);color:var(--accent-d)">${unreadCount()} непрочитанных</div>
+    </div>
+    <div class="row g9" style="background:var(--soft2);border-radius:13px;padding:12px 14px">
+      ${I.search()}<input id="q" placeholder="Поиск по имени, тексту, телефону" style="font:400 14px/1 var(--f)" value="${esc(inboxQuery)}">
+    </div>
+    <div class="row wrap g7">
+      ${chips.map(([k,l,n])=>`<button class="chip${k==='attention'?' warm':''}${inboxFilter===k?' on':''}" data-act="inbox-filter" data-f="${k}">${l}${n?' '+n:''}</button>`).join('')}
+    </div>
+  </div>
+  <div class="f1" id="inboxList">${inboxRows()}</div>
+</div>
+${tabbar('inbox')}`;
+};
+function inboxRows(){
+  const q = inboxQuery.trim().toLowerCase();
+  let list = S.dialogs.slice().sort((a,b)=>b.ts-a.ts);
+  if(inboxFilter !== 'all') list = list.filter(d=>d.status===inboxFilter);
+  if(q) list = list.filter(d => (d.full+' '+d.un+' '+d.phone+' '+d.msgs.map(m=>m.t).join(' ')).toLowerCase().includes(q));
+  if(!list.length) return `<div class="col g8" style="align-items:center;padding:56px 30px;text-align:center">
+    <div class="h5" style="color:var(--muted2)">Ничего не найдено</div>
+    <div class="cap">Попробуйте другой фильтр или запрос</div></div>`;
+  return list.map((d,i)=>`
+    <button class="dlg${d.unread?' unread':''}" style="width:100%" data-act="chat" data-id="${d.id}">
+      <div class="av ${d.unread?'warm':''}" style="width:46px;height:46px;border-radius:15px;font-size:15px">${esc(initials(d.full))}</div>
+      <div class="f1 col g6" style="text-align:left">
+        <div class="between" style="align-items:baseline">
+          <div class="row g7">${d.unread?`<div style="width:7px;height:7px;border-radius:4px;background:var(--accent)"></div>`:''}
+            <div style="font:600 15px/1 var(--f)">${esc(d.name)}</div></div>
+          <div style="font:${d.unread?'500':'400'} 12px/1 var(--f);color:${d.unread?'var(--accent-d)':'var(--muted5)'}">${hhmm(d.ts)}</div>
+        </div>
+        <div style="font:${d.unread?'500':'400'} 13px/1.35 var(--f);color:${d.unread?'var(--ink2)':'var(--muted2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(lastLine(d))}</div>
+        <div style="align-self:flex-start">${d.status==='human'&&d.mgr!=='—'?`<div class="badge human">HUMAN · ${esc(d.mgr.split(' ')[0])}</div>`:statusBadge(d.status)}</div>
+      </div>
+    </button>${i<list.length-1?'<div class="sep"></div>':''}`).join('');
+}
+MOUNT.inbox = el => {
+  const q = $('#q', el);
+  q.addEventListener('input', () => { inboxQuery = q.value; $('#inboxList', el).innerHTML = inboxRows(); });
+};
+
+/* ---------- Chat ---------- */
+VIEWS.chat = () => {
+  const d = S.dialogs.find(x=>x.id===S.openChat);
+  if(!d) return `<div class="body"><div class="pad"><div class="h3">Диалог не найден</div></div></div>`;
+  const taken = d.status === 'human';
+  return `
+<div style="flex:none;padding:calc(14px + var(--safe-top)) 18px 16px;border-bottom:1px solid var(--line3);display:flex;align-items:center;gap:12px">
+  <button style="font:500 22px/1 var(--f);color:var(--muted3);padding:0 2px" data-act="back">‹</button>
+  <div class="av ${d.status==='attention'?'warm':''}" style="width:40px;height:40px;border-radius:13px">${esc(initials(d.full))}</div>
+  <div class="f1 col g4"><div style="font:600 15px/1 var(--f)">${esc(d.name)}</div>
+    <div class="cap2">${d.un ? '@' + esc(d.un) + ' · ' : ''}${stageName(d.stage)}</div></div>
+  ${statusBadge(d.status)}
+</div>
+<div class="body" style="background:#FBFAF8">
+  <div class="col g10" style="padding:18px;flex:1" id="chatFeed">${chatMsgs(d)}</div>
+</div>
+<div style="flex:none;padding:0 18px calc(16px + var(--safe-bot));background:#FBFAF8;display:flex;flex-direction:column;gap:10px">
+  ${taken ? `<div style="background:var(--dark);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+      <div style="width:22px;height:22px;flex:none;border-radius:7px;background:var(--dark3);display:flex;align-items:center;justify-content:center">${I.pause()}</div>
+      <div class="f1 col g4"><div style="font:600 13px/1 var(--f);color:#fff">AI paused while you reply</div>
+        <div style="font:400 12px/1.35 var(--f);color:var(--dark-mut)">Вы отвечаете как ${esc(meName())}. AI не пишет клиенту, пока диалог у вас.</div></div>
+    </div>` : `<div class="row g9">
+      <button class="btn dark f1" style="height:48px;border-radius:14px;font-size:15px" data-act="takeover">Take over</button>
+      <button class="row" style="width:48px;height:48px;border-radius:14px;background:var(--card);border:1px solid var(--line2);justify-content:center" data-act="client-card">${I.user('#5F656D')}</button>
+    </div>`}
+  <div class="composer"><input id="chatInp" placeholder="${taken ? 'Ответить клиенту…' : 'Ответить от имени бота…'}">
+    <button class="send" data-act="chat-send">${I.arrow()}</button></div>
+  ${taken ? `<button style="text-align:center;font:500 13px/1 var(--f);color:var(--accent);width:100%" data-act="return-ai">Return to AI</button>`
+          : `<button style="text-align:center;font:500 13px/1 var(--f);color:var(--muted4);width:100%" data-act="client-card">Карточка клиента</button>`}
+</div>`;
+};
+const stageName = s => ({new:'New',interested:'Interested',inprogress:'In progress',customer:'Customer'}[s] || 'New');
+function meName(){
+  if(NET.me && NET.me.name) return NET.me.name.split(' ')[0];
+  const u = TG && TG.initDataUnsafe && TG.initDataUnsafe.user;
+  return (u && u.first_name) || (S.team[0] && S.team[0].name.split(' ')[0]) || 'вы';
+}
+function chatMsgs(d){
+  let day = '';
+  return d.msgs.map(m=>{
+    let out = '';
+    const dd = new Date(m.ts||now()).toDateString();
+    if(dd !== day){ day = dd; out += `<div style="align-self:center;font:500 11px/1 var(--m);letter-spacing:.08em;color:var(--muted5)">${dayLabel(m.ts)}</div>`; }
+    if(m.r === 'sys') return out + `<div class="bub sys">${esc(m.t)}</div>`;
+    if(m.r === 'user') return out + `<div class="bub in">${esc(m.t)}</div>`;
+    const who = m.r === 'human' ? (m.who || meName()) : 'AI';
+    return out + `<div class="bub out">${esc(m.t)}</div><div class="meta" style="align-self:flex-end">${esc(who)} · ${hhmm(m.ts||now())}</div>`;
+  }).join('');
+}
+function dayLabel(ts){
+  const d = new Date(ts||now()), t = new Date();
+  if(d.toDateString() === t.toDateString()) return 'СЕГОДНЯ';
+  const y = new Date(t - 864e5);
+  if(d.toDateString() === y.toDateString()) return 'ВЧЕРА';
+  return d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'}).toUpperCase();
+}
+MOUNT.chat = el => {
+  const d = S.dialogs.find(x=>x.id===S.openChat);
+  if(d && d.unread){
+    d.unread = false; save();
+    if(NET.on) NET.req('/api/dialog/read', { id: d.id }).catch(()=>{});
+  }
+  const f = $('#chatFeed', el); if(f) f.parentElement.scrollTop = f.parentElement.scrollHeight;
+  const inp = $('#chatInp', el);
+  if(inp) inp.addEventListener('keydown', e => { if(e.key === 'Enter') chatSend(); });
+};
+function refreshChat(){
+  const el = $('#v-chat'); if(!el) return;
+  const body = $('.body', el), f = $('#chatFeed', el);
+  const d = S.dialogs.find(x=>x.id===S.openChat);
+  f.innerHTML = chatMsgs(d);
+  body.scrollTop = body.scrollHeight;
+}
+async function chatSend(){
+  const d = S.dialogs.find(x=>x.id===S.openChat); if(!d) return;
+  const inp = $('#chatInp'); const text = inp.value.trim(); if(!text) return;
+  inp.value = '';
+  const human = d.status === 'human';
+  if(NET.on){
+    // оптимистично показываем своё сообщение, при ошибке — убираем
+    const optimistic = { r: human ? 'human' : 'ai', t:text, ts:now(), who: human ? meName() : undefined, pending:true };
+    d.msgs.push(optimistic); d.ts = now(); refreshChat(); haptic('light');
+    try {
+      const r = await NET.req('/api/dialog/send', { id: d.id, text, who: meName() });
+      applyDialog(r.dialog);
+    } catch(e){
+      const i = d.msgs.indexOf(optimistic); if(i >= 0) d.msgs.splice(i, 1);
+      refreshChat(); netErr(e);
+      if(inp) inp.value = text;
+    }
+    return;
+  }
+  d.msgs.push({ r: human ? 'human' : 'ai', t:text, ts:now(), who: human ? meName() : undefined });
+  d.ts = now(); S.counters.msgs++; if(!human) S.counters.byAi++;
+  save(); refreshChat(); haptic('light');
+}
+/** Симуляция входящего сообщения клиента + автоответ AI */
+function simulateIncoming(d, text){
+  d.msgs.push({ r:'user', t:text, ts:now() }); d.ts = now(); S.counters.msgs++;
+  save(); refreshChat();
+  if(d.status === 'human' || S.ai.paused) return;
+  const el = $('#v-chat'); if(!el) return;
+  const f = $('#chatFeed', el);
+  const typ = document.createElement('div'); typ.className = 'typing'; f.appendChild(typ);
+  typ.innerHTML = '<i></i><i></i><i></i>';
+  $('.body', el).scrollTop = 99999;
+  setTimeout(()=>{
+    const r = aiReply(text);
+    if(r.handoff){
+      d.msgs.push({ r:'ai', t:r.text, ts:now() });
+      d.msgs.push({ r:'sys', t:'AI передал диалог: ' + r.reason, ts:now() });
+      d.status = 'attention'; S.counters.handed++;
+      haptic('warn');
+    } else {
+      d.msgs.push({ r:'ai', t:r.text, ts:now() }); S.counters.byAi++; S.counters.msgs++;
+      haptic('light');
+    }
+    save(); refreshChat();
+  }, 1000);
+}
+
+/* ---------- Clients ---------- */
+let clientFilter = 'all', openClient = null;
+VIEWS.clients = () => {
+  const st = { all:S.dialogs.length, new:S.dialogs.filter(d=>d.stage==='new').length,
+    interested:S.dialogs.filter(d=>d.stage==='interested').length, customer:S.dialogs.filter(d=>d.stage==='customer').length };
+  let list = S.dialogs.slice();
+  if(clientFilter !== 'all') list = list.filter(d=>d.stage===clientFilter);
+  return `
+<div class="body"><div class="pad-core g16">
+  <div class="between" style="align-items:baseline"><div class="h3">Clients</div>
+    <div class="cap" style="font-size:13px">${nf(NET.on ? S.dialogs.length : 304 + S.dialogs.length)} всего</div></div>
+  <div class="row g7 wrap">
+    ${[['all','Все',0],['new','New',st.new],['interested','Interested',st.interested],['customer','Customer',st.customer]]
+      .map(([k,l,n])=>`<button class="chip${clientFilter===k?' on':''}" data-act="cl-filter" data-f="${k}">${l}${n?' '+n:''}</button>`).join('')}
+  </div>
+  <div class="col g10">${list.length
+    ? list.map(d=> d.id === (openClient || list[0].id) ? clientBig(d) : clientSmall(d)).join('')
+    : `<div class="box plain" style="border-radius:18px;padding:24px;text-align:center">
+        <div class="cap">${clientFilter === 'all' ? 'Клиенты появятся, как только кто-то напишет боту.' : 'В этой стадии пока никого.'}</div></div>`}</div>
+</div></div>
+${tabbar('clients')}`;
+};
+function clientBig(d){
+  return `<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:13px">
+    <div class="row g12">
+      <div class="av warm" style="width:44px;height:44px">${esc(initials(d.full))}</div>
+      <div class="f1 col g4"><div class="h5">${esc(d.full)}</div>
+        <div style="font:500 13px/1 var(--m);color:var(--muted4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${[d.un ? '@' + esc(d.un) : '', esc(d.phone)].filter(Boolean).join(' · ') || 'контактов пока нет'}</div></div>
+      <div class="badge none ${d.stage==='customer'?'ok':d.stage==='interested'?'att':d.stage==='inprogress'?'human':'ai'}">${stageName(d.stage).toUpperCase()}</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--accent-b);border-radius:13px;padding:12px;display:flex;flex-direction:column;gap:6px">
+      <div class="row g6"><div style="width:5px;height:5px;border-radius:3px;background:var(--accent)"></div>
+        <div style="font:600 11px/1 var(--m);letter-spacing:.08em;color:var(--accent-d)">AI SUMMARY</div></div>
+      <div style="font:400 13px/1.45 var(--f);color:var(--ink2)">${esc(d.summary)}</div>
+    </div>
+    <div class="col g8">
+      <div class="between"><div class="cap" style="font-size:13px">Интерес</div><div style="font:500 13px/1 var(--f)">${esc(d.interest)}</div></div>
+      <div class="between"><div class="cap" style="font-size:13px">Менеджер</div><div style="font:500 13px/1 var(--f)">${esc(d.mgr)}</div></div>
+      <div class="between"><div class="cap" style="font-size:13px">Обращений</div><div style="font:500 13px/1 var(--f)">${d.touches} · последнее ${hhmm(d.ts)}</div></div>
+    </div>
+    <button style="background:var(--card);border:1px solid var(--line4);border-radius:13px;padding:12px;font:400 13px/1.45 var(--f);color:var(--muted);width:100%;text-align:left" data-act="note" data-id="${d.id}">Заметка: ${d.note ? esc(d.note) : '<span style="color:var(--muted5)">добавить…</span>'}</button>
+    <div class="row g9">
+      <button class="btn tint f1" data-act="chat" data-id="${d.id}">Открыть диалог</button>
+      <button class="btn ghost" style="width:110px" data-act="cl-close">Свернуть</button>
+    </div>
+  </div>`;
+}
+function clientSmall(d){
+  return `<button class="box plain" style="border-radius:18px;padding:14px;display:flex;align-items:center;gap:12px;width:100%" data-act="cl-open" data-id="${d.id}">
+    <div class="av" style="width:40px;height:40px;border-radius:13px;font-size:13px">${esc(initials(d.full))}</div>
+    <div class="f1 col g4" style="text-align:left;min-width:0"><div style="font:600 15px/1 var(--f);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.full)}</div>
+      <div class="cap" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.interest)}</div></div>
+    <div class="badge none ${d.stage==='customer'?'ok':d.stage==='interested'?'att':d.stage==='inprogress'?'human':'ai'}">${stageName(d.stage).toUpperCase()}</div>
+  </button>`;
+}
+
+/* ---------- Knowledge ---------- */
+VIEWS.knowledge = () => {
+  const p = kbPercent();
+  const gaps = [];
+  if(!S.knowledge.some(k=>k.kind==='price'&&k.ready)) gaps.push('цены');
+  if(!S.knowledge.some(k=>k.kind==='rules'&&k.ready)) gaps.push('правила доставки');
+  if(!S.knowledge.some(k=>k.kind==='faq'&&k.ready))   gaps.push('частые вопросы');
+  return `
+<div class="body"><div class="pad-core">
+  <div class="col g8"><div class="h3">Что должен знать ваш AI?</div>
+    <div class="sub-s">Чем больше материалов, тем точнее ответы. Обновляется сразу.</div></div>
+  <div class="box" style="display:flex;align-items:center;gap:14px">
+    <div class="ring" style="--p:${p}%"></div>
+    <div class="f1 col g4"><div style="font:600 15px/1 var(--f)">База заполнена на ${p}%</div>
+      <div class="cap" style="font-size:13px">${gaps.length ? 'Добавьте ' + gaps.slice(0,2).join(' и ') : 'Всё основное на месте'}</div>
+      ${NET.on && NET.quota && NET.quota.kbLimit ? `<div class="cap2">${nf(NET.quota.kbUsed)} из ${nf(NET.quota.kbLimit)} знаков</div>` : ''}</div>
+  </div>
+  <div class="col g10">
+    ${S.knowledge.length ? S.knowledge.map((k,i)=>`
+      <button class="box plain" style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:13px;width:100%" data-act="kb-open" data-i="${i}">
+        <div class="av ${k.ready?'warm':''}" style="width:38px;height:38px;border-radius:12px;font-size:10px">${esc(k.badge)}</div>
+        <div class="f1 col g4" style="text-align:left"><div style="font:600 15px/1 var(--f)">${esc(k.title)}</div>
+          <div class="cap2">${esc(k.meta)}</div></div>
+        <div style="font:500 12px/1 var(--m);color:${k.ready?'var(--green-d)':'var(--muted4)'}">${k.ready?'ГОТОВО':'ЧЕРНОВИК'}</div>
+      </button>`).join('') : `<div class="box plain" style="border-radius:18px;padding:22px;text-align:center">
+        <div class="cap">Пока пусто. Добавьте первый источник ниже.</div></div>`}
+  </div>
+  <div class="col g9"><div class="lbl">Добавить</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+      ${[['text','Текст','Написать своими словами'],['doc','Документ','PDF, DOCX, XLSX'],
+         ['price','Товары и цены','Прайс или таблица'],['rules','Правила','Доставка, оплата, возврат']]
+        .map(([k,t,d])=>`<button class="drop" data-act="kb-add" data-kind="${k}"><b>${t}</b><span>${d}</span></button>`).join('')}
+    </div></div>
+</div></div>
+${tabbar('more')}`;
+};
+
+/* ---------- AI Settings ---------- */
+VIEWS.aiset = () => `
+<div class="body"><div class="pad-core g16">
+  <div class="between"><div class="h3">AI Settings</div>
+    ${S.ai.paused?`<div class="badge att">НА ПАУЗЕ</div>`:`<div class="pill-live"><div class="dot"></div>ACTIVE</div>`}</div>
+  <div class="col g12">
+    <div class="field"><div class="lbl">Имя AI-менеджера</div>
+      <div class="inp"><input id="aiName" value="${esc(S.ai.name)}" placeholder="Ника"></div></div>
+    <div class="row g10" style="align-items:stretch">
+      <div class="f1 field"><div class="lbl">Стиль</div>
+        <button class="inp" data-act="pick-style">${styleName(S.ai.style)}<span style="color:var(--muted6)">▾</span></button></div>
+      <div class="field" style="width:118px"><div class="lbl">Язык</div>
+        <button class="inp" data-act="pick-lang">${esc(S.ai.lang)}<span style="color:var(--muted6)">▾</span></button></div>
+    </div>
+    <div class="col g9">
+      <div class="between" style="align-items:baseline"><div class="lbl">Длина сообщений</div>
+        <div class="a" id="lenLbl">${lenPhrase(S.ai.lengthVal)}</div></div>
+      <div class="slider"><i style="width:${S.ai.lengthVal}%"></i><b style="left:${S.ai.lengthVal}%"></b>
+        <input type="range" min="5" max="95" value="${S.ai.lengthVal}" id="lenRange"></div>
+    </div>
+    <div class="field"><div class="lbl">Инструкции</div>
+      <div class="inp"><textarea id="aiInstr" rows="3" placeholder="Что AI должен всегда уточнять или предлагать">${esc(S.ai.instructions)}</textarea></div></div>
+    <div class="col g9"><div class="lbl">Запрещённые темы</div>
+      <div class="row wrap g7" id="banned">${bannedChips()}</div></div>
+    <div class="col g9"><div class="lbl">AI может сам</div>
+      <div class="list" style="padding:4px 14px">
+        ${[['canProducts','Отвечать о товарах и ценах'],['canContacts','Собирать телефон и имя'],['canDiscount','Давать скидки']].map(([k,l])=>
+          `<div class="between" style="padding:13px 0"><div style="font:500 15px/1 var(--f)">${l}</div>
+            <button class="sw ${S.ai[k]?'on':''}" data-act="toggle-ai" data-k="${k}" data-re="1"><i></i></button></div>`).join('')}
+      </div></div>
+  </div>
+  <div class="push" style="background:var(--soft3);border:1px solid var(--line);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px;margin-top:18px">
+    <div class="between"><div style="font:600 14px/1 var(--f)">Превью</div>
+      <button class="a" style="font-size:12px" data-act="preview-refresh">Обновить</button></div>
+    <div class="col g10" id="preview"></div>
+    <button class="btn dark sm" data-act="save-ai">Сохранить изменения</button>
+  </div>
+</div></div>
+${tabbar('ai')}`;
+
+function bannedChips(){
+  return S.ai.banned.map((b,i)=>`<button class="chip" data-act="rm-banned" data-i="${i}">${esc(b)} ×</button>`).join('')
+    + `<button class="chip out" data-act="add-banned">+ добавить</button>`;
+}
+const PREVIEW_QS = ['Сколько стоит доставка в Казань?','Есть люстра в зал?','Дайте скидку 20%','Нужен счёт на юрлицо'];
+let previewQ = 0;
+MOUNT.aiset = el => {
+  const n = $('#aiName', el); n.addEventListener('input', ()=>{ S.ai.name = n.value; save(); pushAI(); });
+  const t = $('#aiInstr', el); t.addEventListener('input', ()=>{ S.ai.instructions = t.value; save(); pushAI(); });
+  const r = $('#lenRange', el), fill = $('.slider i', el), knob = $('.slider b', el), lbl = $('#lenLbl', el);
+  r.addEventListener('input', ()=>{
+    const v = +r.value; S.ai.lengthVal = v;
+    S.ai.length = v < 34 ? 'short' : v < 67 ? 'mid' : 'long';
+    fill.style.width = v + '%'; knob.style.left = v + '%'; lbl.textContent = lenPhrase(v); save(); pushAI();
+  });
+  r.addEventListener('change', ()=>{ haptic('sel'); renderPreview(); });
+  renderPreview();
+};
+function renderPreview(){
+  const box = $('#preview'); if(!box) return;
+  const q = PREVIEW_QS[previewQ % PREVIEW_QS.length];
+  const a = aiReply(q);
+  box.innerHTML = `<div class="bub out" style="border-radius:14px 14px 4px 14px;font-size:13px;padding:10px 13px">${esc(q)}</div>
+    <div class="bub in flat" style="border-radius:14px 14px 14px 4px;font-size:13px;padding:10px 13px">${esc(a.text)}</div>
+    ${a.handoff?`<div class="cap2" style="text-align:right">→ передано менеджеру · ${esc(a.reason)}</div>`:''}`;
+}
+
+/* ---------- Analytics ---------- */
+const PERIODS = { 7:{msgs:964,dt:'+11%',cl:52,rate:89,hand:88,bars:[42,58,50,71,63,84,77]},
+                  30:{msgs:4128,dt:'+18%',cl:214,rate:91,hand:371,bars:[38,52,44,66,58,78,71,88,62,96]},
+                  90:{msgs:11740,dt:'+31%',cl:602,rate:93,hand:948,bars:[30,41,38,52,49,61,58,70,66,79,74,92]} };
+/** Считает аналитику по фактическим диалогам за выбранный период. */
+function realAnalytics(){
+  const days = S.period, since = now() - days * 864e5;
+  const msgs = [], byDay = new Array(Math.min(days, 12)).fill(0);
+  const bucket = 864e5 * days / byDay.length;
+  let total = 0, ai = 0, handed = 0, newCl = 0;
+  S.dialogs.forEach(d => {
+    // новый клиент = диалог, который начался внутри периода
+    const first = d.msgs.length ? d.msgs[0].ts : d.ts;
+    if(first >= since) newCl++;
+    d.msgs.forEach(m => {
+      if(m.ts < since) return;
+      total++;
+      if(m.r === 'ai') ai++;
+      if(m.r === 'sys' && /передал диалог/.test(m.t)) handed++;
+      const i = Math.min(byDay.length - 1, Math.floor((m.ts - since) / bucket));
+      byDay[i]++;
+    });
+  });
+  const peak = Math.max(1, ...byDay);
+  const answered = ai + handed;
+  const times = [];
+  S.dialogs.forEach(d => d.msgs.forEach(m => { if(m.ms) times.push(m.ms); }));
+  const avg = times.length ? (times.reduce((a,b)=>a+b,0) / times.length / 1000).toFixed(1) + 'с' : '—';
+  return {
+    msgs: total,
+    dt: '',
+    cl: newCl,
+    rate: answered ? Math.round((answered - handed) / answered * 100) : 0,
+    hand: handed,
+    avg,
+    bars: byDay.map(v => Math.max(4, Math.round(v / peak * 100))),
+    empty: total === 0,
+  };
+}
+
+/** Разбивка вопросов по темам — по ключевым словам в сообщениях клиентов. */
+function realTopics(){
+  const buckets = [
+    ['Наличие и цены', /цен|стои|сколько|наличи|есть ли|прайс/i],
+    ['Доставка', /доставк|привез|срок|когда|отправ|курьер/i],
+    ['Подбор под задачу', /подобрать|посовет|какой|подойд|нужн/i],
+    ['Счёт и документы', /счёт|счет|инн|юрлиц|договор|документ|накладн/i],
+  ];
+  const counts = buckets.map(() => 0);
+  S.dialogs.forEach(d => d.msgs.forEach(m => {
+    if(m.r !== 'user') return;
+    buckets.forEach(([, re], i) => { if(re.test(m.t)) counts[i]++; });
+  }));
+  // одно сообщение может попасть в несколько тем — делим на сумму попаданий,
+  // иначе доли не сойдутся в 100%
+  const hits = counts.reduce((a,b) => a + b, 0);
+  if(!hits) return [];
+  return buckets.map(([name], i) => [name, Math.round(counts[i] / hits * 100)]).filter(x => x[1] > 0).sort((a,b) => b[1] - a[1]);
+}
+
+VIEWS.analytics = () => {
+  const p = NET.on ? realAnalytics() : (PERIODS[S.period] || PERIODS[30]);
+  const peak = Math.max.apply(null, p.bars);
+  const topics = NET.on ? realTopics() : [['Наличие и цены',38],['Доставка',26],['Подбор под задачу',19],['Счёт и документы',11]];
+  return `
+<div class="body"><div class="pad-core">
+  <div class="between"><div class="h3">Analytics</div>
+    <button class="chip" data-act="pick-period">${S.period} дней ▾</button></div>
+  <div class="darkcard">
+    <div style="font:400 13px/1 var(--f);color:var(--dark-mut)">Messages</div>
+    <div class="row g10" style="align-items:baseline">
+      <div style="font:600 38px/1 var(--m);color:#fff">${nf(p.msgs)}</div>
+      ${p.dt ? `<div style="font:600 13px/1 var(--f);color:var(--green-l)">${p.dt}</div>` : ''}
+    </div>
+    <div class="bars">${p.bars.map(h=>`<i class="${h===peak?'on':''}" style="height:${h}%"></i>`).join('')}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    ${[['New clients',p.cl, NET.on ? 'за ' + S.period + ' дней' : '+'+Math.round(p.cl/9)+' за неделю','var(--green-d)'],
+       ['AI resolution rate',p.rate+'%', NET.on ? 'решено без человека' : '+3 п.п.','var(--green-d)'],
+       ['Human handoffs',p.hand,Math.round(100-p.rate)+'% диалогов','var(--muted4)'],
+       ['Response time', NET.on ? p.avg : '1.4с', NET.on ? 'среднее время ответа AI' : 'AI · человек 6 мин','var(--muted4)']]
+      .map(([t,v,d,c])=>`<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:7px">
+        <div class="cap2" style="color:var(--muted3)">${t}</div>
+        <div style="font:600 24px/1 var(--m)">${nf(v)}</div>
+        <div style="font:500 12px/1 var(--f);color:${c}">${d}</div></div>`).join('')}
+  </div>
+  <div class="col g11"><div class="h5">О чём спрашивают</div>
+    ${!topics.length ? `<div class="cap">Наберётся статистика — покажем разбивку по темам.</div>` : ''}
+    <div class="col g9">${topics.map(([t,v])=>`<div class="row g11">
+      <div class="f1" style="font:400 14px/1 var(--f);color:var(--ink3)">${t}</div>
+      <div class="track"><i style="width:${Math.round(v / Math.max(1, topics[0][1]) * 100)}%"></i></div>
+      <div style="width:34px;text-align:right;font:500 13px/1 var(--m);color:var(--muted3)">${v}%</div>
+    </div>`).join('')}</div>
+  </div>
+  ${p.hand ? `<div class="box warm" style="border-radius:16px">Передач человеку: ${p.hand}. Посмотрите причины в Inbox — частые вопросы стоит добавить в Knowledge, чтобы AI отвечал сам.</div>` : ''}
+</div></div>
+${tabbar('more')}`;
+};
+
+/* ---------- Channel ---------- */
+let channelPost = null, channelTopic = 'Новая коллекция торшеров, скидка 10%', channelKind = 'Анонс';
+VIEWS.channel = () => `
+<div class="body"><div class="pad-core g16">
+  <div class="col g7"><div class="h3">Channel</div>
+    <div class="sub-s">AI напишет пост для @${esc((S.bot.username||'my_bot').replace('_bot','_channel'))} — вы отредактируете и опубликуете.</div></div>
+  <div class="col g9"><div class="lbl">О чём пост</div>
+    <div class="inp"><input id="chTopic" value="${esc(channelTopic)}" placeholder="Например: новая коллекция, скидка 10%"></div>
+    <div class="row wrap g7">
+      ${['Анонс','Кейс','Совет','Акция'].map(k=>`<button class="chip${channelKind===k?' on':''}" data-act="ch-kind" data-k="${k}">${k}</button>`).join('')}
+    </div></div>
+  <button class="btn tint" data-act="ch-gen">${I.spark()} Предложить текст</button>
+  <div class="col g9">
+    <div class="between" style="align-items:baseline"><div class="lbl">Preview</div>
+      <button class="a" style="font-size:12px" data-act="ch-gen">Ещё вариант</button></div>
+    <div style="background:var(--soft3);border:1px solid var(--line);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:11px" id="chPreview">
+      ${channelPreview()}
+    </div>
+  </div>
+  <div class="push row g9" style="padding-top:12px">
+    <button class="btn f1" style="height:52px" data-act="ch-publish">Publish</button>
+    <button class="btn ghost" style="width:120px;height:52px" data-act="ch-schedule">Schedule</button>
+  </div>
+</div></div>
+${tabbar('more')}`;
+
+function channelPreview(){
+  const body = channelPost || genPost();
+  return `<div class="row g10">
+      <div class="av warm" style="width:32px;height:32px;border-radius:10px;font-size:12px">${esc(initials(S.biz.name||S.bot.name))}</div>
+      <div style="font:600 14px/1 var(--f)">${esc((S.biz.name||S.bot.name).split(' ')[0])}</div></div>
+    <div style="font:400 14px/1.5 var(--f);color:var(--ink2)">${body.replace(/\n/g,'<br>')}</div>
+    <div style="height:120px;border-radius:14px;background:var(--line3);border:1px dashed var(--dash);display:flex;align-items:center;justify-content:center;font:400 13px/1 var(--f);color:var(--muted5)">Фото коллекции</div>
+    <div class="cap2" style="color:var(--muted5)">${S.bot.subs
+      ? nf(S.bot.subs) + ' подписчиков · охват ~' + nf(Math.round(S.bot.subs * 0.51))
+      : NET.on ? 'канал не подключён — охват посчитаем после привязки' : nf(1248) + ' подписчиков · охват ~' + nf(636)}</div>`;
+}
+function genPost(){
+  const t = channelTopic || 'новость';
+  const open = { 'Анонс':['Привезли','Показываем','Добавили'], 'Кейс':['Собрали свет','Сделали проект','Закрыли задачу'],
+                 'Совет':['Как выбрать','Разбираем','Коротко о том, как'], 'Акция':['До конца недели','Только сейчас','Ловите'] }[channelKind];
+  const lead = open[Math.floor(Math.random()*open.length)];
+  const cta = S.ai.canProducts
+    ? 'Подобрать модель под комнату можно прямо в боте: напишите площадь и высоту потолков.'
+    : 'Напишите в бот — менеджер подберёт вариант.';
+  channelPost = lead + ' — ' + t.charAt(0).toLowerCase() + t.slice(1) + '.\n\n' +
+    (channelKind === 'Акция' ? 'Успейте до конца месяца. ' : '') + cta;
+  return channelPost;
+}
+MOUNT.channel = el => {
+  const i = $('#chTopic', el);
+  i.addEventListener('input', ()=>{ channelTopic = i.value; });
+};
+
+/* ---------- More menu ---------- */
+VIEWS.more = () => `
+<div class="body"><div class="pad-core">
+  <div class="h3">More</div>
+  <div class="box" style="border-radius:20px;padding:18px;display:flex;align-items:center;gap:13px">
+    <div class="av warm" style="width:46px;height:46px;border-radius:15px;font-size:15px">${esc(initials(S.bot.name))}</div>
+    <div class="f1 col g4" style="min-width:0"><div class="h5" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.biz.name || S.bot.name)}</div>
+      <div style="font:500 13px/1 var(--m);color:var(--muted3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@${esc(S.bot.username)} · Pro</div></div>
+    ${S.ai.paused?`<div class="badge att">PAUSED</div>`:`<div class="pill-live"><div class="dot"></div>ACTIVE</div>`}
+  </div>
+  <div class="list plain">
+    ${[['knowledge','Knowledge', S.knowledge.length + ' ' + plural(S.knowledge.length,'источник','источника','источников') + ' · ' + kbPercent() + '%'],
+       ['team','Team', S.team.length + ' ' + plural(S.team.length,'менеджер','менеджера','менеджеров') + ' · ' + S.depts.length + ' ' + plural(S.depts.length,'отдел','отдела','отделов')],
+       ['channel','Channel','Beta','NEW'],
+       ['analytics','Analytics',''],
+       ['billing','Billing','Pro · до 12 сентября'],
+       ['settings','Settings','']].map(([k,t,d,badge])=>`
+      <button class="between" style="width:100%" data-act="more-go" data-k="${k}">
+        <div class="col g4" style="text-align:left"><div style="font:500 15px/1 var(--f)">${t}</div>
+          ${d?`<div class="cap2">${d}</div>`:''}</div>
+        ${badge?`<div class="badge att">${badge}</div>`:`<div style="color:#C4C8CD;font:400 18px/1 var(--f)">›</div>`}
+      </button>`).join('')}
+  </div>
+  <button class="box warm" style="border-radius:18px;display:flex;flex-direction:column;gap:9px;width:100%;text-align:left" data-act="toggle-pause">
+    <div class="between" style="width:100%"><div style="font:600 15px/1 var(--f);color:var(--accent-ink)">${S.ai.paused?'AI на паузе':'Пауза AI'}</div>
+      <div class="sw ${S.ai.paused?'on':''}"><i></i></div></div>
+    <div style="font:400 13px/1.45 var(--f);color:var(--accent-ink2)">${S.ai.paused?'Все диалоги идут менеджерам. Нажмите, чтобы вернуть AI.':'Бот перестанет отвечать сам — все диалоги пойдут менеджерам.'}</div>
+  </button>
+  ${NET.on && NET.links && (NET.links.privacy || NET.links.terms || NET.links.support) ? `
+  <div class="row wrap g7" style="justify-content:center;padding-top:4px">
+    ${NET.links.privacy ? `<button class="chip out" data-act="ext" data-url="${esc(NET.links.privacy)}">Политика данных</button>` : ''}
+    ${NET.links.terms ? `<button class="chip out" data-act="ext" data-url="${esc(NET.links.terms)}">Условия</button>` : ''}
+    ${NET.links.support ? `<button class="chip out" data-act="ext" data-url="${esc(NET.links.support)}">Поддержка</button>` : ''}
+  </div>` : ''}
+  <div class="push col g4" style="padding-top:16px">
+    <button class="link" data-act="restart">Пройти настройку заново</button>
+    ${NET.on ? `<button class="link" style="color:#C93A3A" data-act="delete-account">Удалить кабинет и все данные</button>` : ''}
+  </div>
+</div></div>
+${tabbar('more')}`;
+
+/* ============================================================
+   Действия
+   ============================================================ */
+const KB_PRESET = {
+  text:  { badge:'TXT', title:'О компании', meta:'написано вручную', kind:'text' },
+  doc:   { badge:'PDF', title:'Каталог 2026', meta:'128 товаров с ценами', kind:'doc' },
+  price: { badge:'XLS', title:'Прайс-лист',  meta:'обновляется вручную', kind:'price' },
+  rules: { badge:'DOC', title:'Правила',     meta:'доставка, оплата, возврат', kind:'rules' },
+  faq:   { badge:'FAQ', title:'Частые вопросы', meta:'14 вопросов', kind:'faq' },
+  web:   { badge:'WEB', title:'Сайт',        meta:'страницы сайта', kind:'web' }
+};
+
+/** Показывает ссылку-приглашение: менеджер жмёт её и начинает получать передачи. */
+function inviteSheet(name, link){
+  if(!link){
+    sheet(`<div class="col g8"><div class="h5" style="font-size:19px">${esc(name)} добавлен</div>
+      <div class="sub-s">Ссылку-приглашение выдать не могу: сервер запущен без BOT_USERNAME.</div></div>
+      <button class="btn ghost" data-act="close-sheet">Понятно</button>`);
+    return;
+  }
+  sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Пригласите ${esc(name)}</div>
+      <div class="sub-s">Отправьте ссылку — по ней менеджер подключится и начнёт получать диалоги, которые AI передал человеку.</div></div>
+    <div class="box" style="border-radius:14px;font:500 13px/1.5 var(--m);word-break:break-all;color:var(--ink3)">${esc(link)}</div>
+    <button class="btn" id="inv-share">Отправить в Telegram</button>
+    <button class="btn ghost" id="inv-copy">Скопировать ссылку</button>`, el => {
+    $('#inv-share', el).addEventListener('click', () => {
+      const url = 'https://t.me/share/url?url=' + encodeURIComponent(link) +
+        '&text=' + encodeURIComponent('Подключайтесь к AI-менеджеру — будете получать диалоги от клиентов');
+      closeSheet();
+      if(TG && TG.openTelegramLink) TG.openTelegramLink(url); else window.open(url, '_blank');
+    });
+    $('#inv-copy', el).addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(link); toast('Ссылка скопирована'); }
+      catch(e){ toast('Скопируйте вручную из поля выше'); }
+      closeSheet();
+    });
+  });
+}
+
+function inputSheet(title, sub, placeholder, value, onOk, okLabel){
+  sheet(`<div class="col g8"><div class="h5" style="font-size:19px">${esc(title)}</div>
+      ${sub?`<div class="sub-s">${esc(sub)}</div>`:''}</div>
+    <div class="inp"><input id="sh-in" placeholder="${esc(placeholder||'')}" value="${esc(value||'')}"></div>
+    <button class="btn" id="sh-ok">${esc(okLabel||'Сохранить')}</button>`, el => {
+    const i = $('#sh-in', el); setTimeout(()=>i.focus(), 260);
+    const done = () => { const v = i.value.trim(); if(!v) return; closeSheet(); onOk(v); };
+    $('#sh-ok', el).addEventListener('click', done);
+    i.addEventListener('keydown', e => { if(e.key === 'Enter') done(); });
+  });
+}
+function pickSheet(title, options, current, onPick){
+  sheet(`<div class="h5" style="font-size:19px">${esc(title)}</div>
+    <div class="list plain" style="padding:0 16px">
+      ${options.map(o=>`<button class="between" style="width:100%" data-pick="${esc(o[0])}">
+        <div style="font:500 15px/1 var(--f)">${esc(o[1])}</div>
+        ${o[0]===current?`<div class="tick">${I.check()}</div>`:`<div style="width:18px"></div>`}</button>`).join('')}
+    </div>`, el => {
+    $$('[data-pick]', el).forEach(b => b.addEventListener('click', () => { closeSheet(); haptic('sel'); onPick(b.dataset.pick); }));
+  });
+}
+
+const ACT = {
+  back: () => back(),
+  start: () => { S.step = 1; save(); go('connect'); },
+  'skip-onb': () => { S.onboarded = true; save(); go('home'); },
+
+  botfather: () => {
+    if(TG && TG.openTelegramLink) TG.openTelegramLink('https://t.me/BotFather');
+    else window.open('https://t.me/BotFather','_blank');
+  },
+  connect: async () => {
+    const v = (S.bot.token||'').trim();
+    if(!/^\d{6,12}:[A-Za-z0-9_\-]{20,}$/.test(v)){ toast('Вставьте полный токен от @BotFather'); haptic('warn'); return; }
+    const btn = $('#connectBtn');
+    const restore = () => { if(btn){ btn.innerHTML = 'Подключить бота'; btn.disabled = false; } };
+    if(btn){ btn.innerHTML = '<div class="spin"></div>Подключаем…'; btn.disabled = true; }
+    if(NET.on){
+      try {
+        const r = await NET.req('/api/bot/connect', { token: v });
+        S.bot = Object.assign({ token:'' }, r.bot);
+        S.bot.connected = true;
+        if(!S.biz.name){ S.biz.name = r.bot.name; pushBiz(); }
+        if(r.warn) toast(r.warn);
+        save(); haptic('ok'); go('connected');
+      } catch(e){ restore(); haptic('warn'); netErr(e); }
+      return;
+    }
+    if(!S.bot.name){ S.bot.name = S.biz.name || 'Nordlight Store'; S.bot.username = 'nordlight_bot'; S.bot.subs = 1248; }
+    setTimeout(()=>{ S.bot.connected = true; if(!S.biz.name) S.biz.name = S.bot.name; save(); haptic('ok'); go('connected'); }, 900);
+  },
+  nobot: () => {
+    sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Создать бота — 4 шага</div>
+        <div class="sub-s">В Telegram откройте @BotFather и пришлите сюда токен.</div></div>
+      <div class="list plain" style="padding:0 16px">
+        ${['Откройте @BotFather','Отправьте команду /newbot','Придумайте имя и @username','Скопируйте токен и вставьте здесь']
+          .map((t,i)=>`<div class="row g12"><div class="av warm" style="width:28px;height:28px;border-radius:9px;font-size:12px">${i+1}</div>
+          <div style="font:400 14px/1.4 var(--f)">${t}</div></div>`).join('')}
+      </div>
+      <button class="btn" data-act="botfather">Открыть @BotFather</button>`);
+  },
+  rebot: () => {
+    if(NET.on) NET.req('/api/bot/disconnect', {}).catch(netErr);
+    S.bot = { token:'', name:'', username:'', subs:0, connected:false }; save(); go('connect', {back:true});
+  },
+  'to-business': () => { S.step = 2; save(); pushStep(); go('business'); },
+
+  'import-site': async () => {
+    const site = (S.biz.site||'').trim();
+    if(!site){ toast('Сначала укажите адрес сайта'); haptic('warn'); return; }
+    toast('Читаем ' + site + '…');
+    if(NET.on){
+      try {
+        const r = await NET.req('/api/knowledge/import', { url: site });
+        S.knowledge = r.knowledge;
+        save(); haptic('ok');
+        toast('Сайт прочитан: ' + Math.round(r.chars/1000) + ' тыс. знаков в базе знаний');
+      } catch(e){ haptic('warn'); netErr(e); }
+      return;
+    }
+    setTimeout(()=>{
+      if(!S.biz.about) S.biz.about = 'Продаём светильники и решения для освещения дома. Доставка по России, монтаж в Москве.';
+      addKB(Object.assign({}, KB_PRESET.web, { title: site, meta: '46 страниц · обновлено сейчас', ready:true }));
+      const a = $('#bizAbout'); if(a) a.value = S.biz.about;
+      save(); haptic('ok'); toast('Сайт добавлен в базу знаний');
+    }, 1100);
+  },
+  'add-mat': (b) => {
+    const map = { file:'doc', price:'price', faq:'faq', link:'web' };
+    kbSheet(map[b.dataset.kind] || 'text');
+  },
+  'to-aiwiz': () => {
+    if(!(S.biz.name||'').trim()){ toast('Укажите название компании'); haptic('warn'); return; }
+    S.step = 3; save(); pushStep(); go('aiwiz');
+  },
+
+  'set-style': (b) => { S.ai.style = b.dataset.v; save(); pushAI(); haptic('sel'); paint('aiwiz'); },
+  'pick-style': () => pickSheet('Стиль общения', [['friendly','Дружелюбный'],['neutral','Нейтральный'],['formal','Формальный']], S.ai.style,
+    v => { S.ai.style = v; save(); pushAI(); paint(current, false); }),
+  'pick-lang': () => pickSheet('Язык ответов', [['RU','Русский'],['EN','English'],['RU+EN','Русский + English']], S.ai.lang,
+    v => { S.ai.lang = v; save(); pushAI(); paint(current, false); }),
+  'pick-len': () => pickSheet('Длина ответов', [['short','Короткие'],['mid','Средние'],['long','Подробные']], S.ai.length,
+    v => { S.ai.length = v; S.ai.lengthVal = v === 'short' ? 25 : v === 'mid' ? 55 : 85; save(); pushAI(); paint(current, false); }),
+  'toggle-ai': (b) => {
+    const k = b.dataset.k; S.ai[k] = !S.ai[k]; save(); pushAI(); haptic('sel');
+    b.classList.toggle('on', S.ai[k]);
+    if(b.dataset.re) renderPreview();
+  },
+  'add-handoff': () => inputSheet('Когда передавать человеку','Например: «просит счёт», «жалоба», «оптовый заказ»','правило','', v => {
+    S.ai.handoff.push(v); save(); pushAI(); const n = $('#handoffs'); if(n) n.innerHTML = handoffChips(); haptic('ok');
+  }, 'Добавить'),
+  'rm-handoff': (b) => { S.ai.handoff.splice(+b.dataset.i, 1); save(); pushAI(); const n = $('#handoffs'); if(n) n.innerHTML = handoffChips(); haptic('sel'); },
+  'to-team': () => { teamEdit = false; S.step = 4; save(); pushStep(); go('team'); },
+
+  'add-mgr': () => {
+    sheet(`<div class="h5" style="font-size:19px">Новый менеджер</div>
+      <div class="field"><div class="lbl">Имя</div><div class="inp"><input id="m-name" placeholder="Дмитрий Морозов"></div></div>
+      <div class="field"><div class="lbl">Telegram username</div><div class="inp"><input id="m-un" placeholder="dmitry_m" autocapitalize="off"></div></div>
+      <div class="field"><div class="lbl">Отдел</div><div class="row g8" id="m-dept">
+        ${S.depts.map((d,i)=>`<button class="chip${i===0?' on':''}" data-d="${esc(d)}">${esc(d)}</button>`).join('')}</div></div>
+      <button class="btn" id="m-ok">Добавить</button>`, el => {
+      let dept = S.depts[0];
+      $$('#m-dept .chip', el).forEach(c => c.addEventListener('click', () => {
+        $$('#m-dept .chip', el).forEach(x=>x.classList.remove('on')); c.classList.add('on'); dept = c.dataset.d; haptic('sel');
+      }));
+      setTimeout(()=>$('#m-name', el).focus(), 260);
+      $('#m-ok', el).addEventListener('click', async () => {
+        const name = $('#m-name', el).value.trim(), un = $('#m-un', el).value.trim().replace('@','');
+        if(!name){ toast('Укажите имя менеджера'); return; }
+        if(NET.on){
+          try {
+            const r = await NET.req('/api/team/invite', { name, un, dept });
+            S.team = r.team; save(); closeSheet(); haptic('ok');
+            const l = $('#teamList'); if(l) l.innerHTML = teamRows();
+            const dd = $('#deptRow'); if(dd) dd.innerHTML = deptCards();
+            setTimeout(()=>inviteSheet(name, r.link), 320);
+          } catch(e){ netErr(e); }
+          return;
+        }
+        if(!un){ toast('Укажите username'); return; }
+        S.team.push({ name, un, role: S.team.length ? 'менеджер' : 'владелец', dept });
+        save(); closeSheet(); haptic('ok');
+        const l = $('#teamList'); if(l) l.innerHTML = teamRows();
+        const d2 = $('#deptRow'); if(d2) d2.innerHTML = deptCards();
+      });
+    });
+  },
+  'mgr-dept': (b) => {
+    const i = +b.dataset.i;
+    pickSheet('Отдел менеджера', S.depts.map(d=>[d,d]), S.team[i].dept, v => {
+      S.team[i].dept = v; save();
+      if(NET.on) NET.req('/api/team/dept', { index: i, dept: v }).catch(netErr);
+      const l = $('#teamList'); if(l) l.innerHTML = teamRows();
+      const d = $('#deptRow'); if(d) d.innerHTML = deptCards();
+    });
+  },
+  'add-dept': () => inputSheet('Новый отдел','Например: Логистика, Сервис','название','', v => {
+    if(S.depts.includes(v)) return; S.depts.push(v); save();
+    if(NET.on) NET.req('/api/depts/add', { name: v }).catch(netErr);
+    const d = $('#deptRow'); if(d) d.innerHTML = deptCards(); haptic('ok');
+  }, 'Добавить'),
+  solo: () => { S.team = []; save(); ACT['to-test'](); },
+  'to-test': () => { S.step = 5; testLog = []; save(); pushStep(); go('test'); },
+
+  'test-q': (b) => testSend(b.dataset.q),
+  'test-send': () => testSend(),
+  'focus-test': () => { const i = $('#testInp'); if(i){ i.focus(); i.scrollIntoView({block:'center',behavior:'smooth'}); } },
+  finish: async () => {
+    if(NET.on){
+      try { await NET.req('/api/onboarded', {}); } catch(e){ return netErr(e); }
+      S.onboarded = true; save(); haptic('ok'); stack = []; go('home'); return;
+    }
+    if(!S.onboarded){
+      S.onboarded = true;
+      if(!S.dialogs.length) demoData(S);
+      const has = k => S.knowledge.some(x => x.kind === k);
+      if(!has('web'))  addKB(Object.assign({}, KB_PRESET.web, { title: S.biz.site || 'nordlight.ru', meta:'46 страниц · обновлено вчера', ready:true }));
+      if(!has('doc'))  addKB(Object.assign({}, KB_PRESET.doc, { ready:true }));
+      if(!has('faq'))  addKB(Object.assign({}, KB_PRESET.faq, { ready:false }));
+      if(!S.team.length) S.team.push({ name:'Анна Ковалёва', un:'anna_k', role:'владелец', dept:'Sales' });
+    }
+    save(); haptic('ok'); stack = []; go('home');
+  },
+
+  /* --- core --- */
+  tab: (b) => { const v = TAB_VIEW[b.dataset.tab]; S.tab = b.dataset.tab; stack = []; save(); haptic('sel'); go(v); },
+  notif: () => {
+    const att = S.dialogs.filter(d=>d.status==='attention');
+    sheet(`<div class="h5" style="font-size:19px">Уведомления</div>
+      ${att.length ? `<div class="col g10">${att.map(d=>`<button class="box" style="border-radius:16px;display:flex;align-items:center;gap:12px;width:100%" data-act="chat" data-id="${d.id}">
+          <div class="av warm" style="width:40px;height:40px">${esc(initials(d.full))}</div>
+          <div class="f1 col g4" style="text-align:left"><div style="font:600 15px/1 var(--f)">${esc(d.name)}</div>
+            <div class="cap2">AI передал диалог · ${hhmm(d.ts)}</div></div>${I.arrow('#B6BBC1')}</button>`).join('')}</div>`
+        : `<div class="box" style="border-radius:16px;text-align:center;padding:22px"><div class="cap">Всё спокойно — AI справляется сам</div></div>`}
+      <button class="btn ghost" data-act="close-sheet">Закрыть</button>`);
+  },
+  'close-sheet': () => closeSheet(),
+  'toggle-pause': () => {
+    S.ai.paused = !S.ai.paused; save(); pushAI(); haptic(S.ai.paused ? 'warn' : 'ok');
+    toast(S.ai.paused ? 'AI на паузе — диалоги идут менеджерам' : 'AI снова отвечает клиентам');
+    paint(current, false);
+  },
+  'filter-att': () => { inboxFilter = 'attention'; S.tab = 'inbox'; stack = []; save(); go('inbox'); },
+  'inbox-filter': (b) => {
+    inboxFilter = b.dataset.f; haptic('sel');
+    $$('[data-act="inbox-filter"]').forEach(x => x.classList.toggle('on', x.dataset.f === inboxFilter));
+    $('#inboxList').innerHTML = inboxRows();
+  },
+  chat: (b) => { closeSheet(); S.openChat = b.dataset.id; save(); go('chat'); },
+  'chat-send': () => chatSend(),
+  takeover: async () => {
+    const d = S.dialogs.find(x=>x.id===S.openChat); if(!d) return;
+    if(NET.on){
+      try { const r = await NET.req('/api/dialog/takeover', { id: d.id, who: meName() }); applyDialog(r.dialog); }
+      catch(e){ return netErr(e); }
+    } else {
+      d.status = 'human'; d.mgr = S.team[0] ? S.team[0].name : meName();
+      d.msgs.push({ r:'sys', t:'Диалог ведёт ' + meName() + ' — AI на паузе', ts:now() });
+      d.ts = now(); save();
+    }
+    haptic('ok'); paint('chat', false); toast('Вы отвечаете клиенту. AI молчит.');
+  },
+  'return-ai': async () => {
+    const d = S.dialogs.find(x=>x.id===S.openChat); if(!d) return;
+    if(NET.on){
+      try { const r = await NET.req('/api/dialog/return', { id: d.id }); applyDialog(r.dialog); }
+      catch(e){ return netErr(e); }
+    } else {
+      d.status = 'ai'; d.mgr = '—';
+      d.msgs.push({ r:'sys', t:'Диалог возвращён AI', ts:now() });
+      d.ts = now(); save();
+    }
+    haptic('ok'); paint('chat', false); toast('AI снова ведёт диалог');
+  },
+  'client-card': () => {
+    const d = S.dialogs.find(x=>x.id===S.openChat); if(!d) return;
+    sheet(`<div class="h5" style="font-size:19px">${esc(d.full)}</div>
+      <div style="background:var(--card);border:1px solid var(--accent-b);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="font:600 11px/1 var(--m);letter-spacing:.08em;color:var(--accent-d)">AI SUMMARY</div>
+        <div style="font:400 13px/1.45 var(--f);color:var(--ink2)">${esc(d.summary)}</div></div>
+      <div class="list plain" style="padding:0 16px">
+        <div class="between"><div class="cap" style="font-size:13px">Телефон</div><div style="font:500 13px/1 var(--m)">${esc(d.phone)}</div></div>
+        <div class="between"><div class="cap" style="font-size:13px">Интерес</div><div style="font:500 13px/1 var(--f)">${esc(d.interest)}</div></div>
+        <div class="between"><div class="cap" style="font-size:13px">Стадия</div><div style="font:500 13px/1 var(--f)">${stageName(d.stage)}</div></div>
+        <div class="between"><div class="cap" style="font-size:13px">Менеджер</div><div style="font:500 13px/1 var(--f)">${esc(d.mgr)}</div></div>
+      </div>
+      <button class="btn ghost" data-act="note" data-id="${d.id}">${d.note ? 'Изменить заметку' : 'Добавить заметку'}</button>`);
+  },
+  note: (b) => {
+    const d = S.dialogs.find(x=>x.id===b.dataset.id); if(!d) return;
+    closeSheet();
+    setTimeout(()=>inputSheet('Заметка о клиенте','Видна только вашей команде','что важно помнить', d.note, v => {
+      d.note = v; save(); haptic('ok');
+      if(NET.on) NET.req('/api/dialog/note', { id: d.id, note: v }).catch(netErr);
+      if(current === 'clients') paint('clients', false);
+    }), 260);
+  },
+  'cl-filter': (b) => { clientFilter = b.dataset.f; openClient = null; save(); haptic('sel'); paint('clients', false); },
+  'cl-open': (b) => { openClient = b.dataset.id; haptic('sel'); paint('clients', false); },
+  'cl-close': () => { openClient = 'none'; paint('clients', false); },
+
+  /* --- knowledge --- */
+  'kb-add': (b) => kbSheet(b.dataset.kind || 'text'),
+  'kb-open': (b) => {
+    const k = S.knowledge[+b.dataset.i]; if(!k) return;
+    sheet(`<div class="col g8"><div class="h5" style="font-size:19px">${esc(k.title)}</div>
+        <div class="sub-s">${esc(k.meta)}</div></div>
+      ${k.chars ? `<div class="box" style="border-radius:16px"><div class="cap">В базе ${nf(k.chars)} знаков — AI видит их при каждом ответе.</div></div>` : ''}
+      ${k.body ? `<div class="box" style="border-radius:16px;font:400 14px/1.5 var(--f);color:var(--ink3);max-height:200px;overflow:auto">${esc(k.body.slice(0,600))}</div>` : ''}
+      <button class="btn ghost" style="color:#C93A3A" data-act="kb-del" data-i="${b.dataset.i}">Удалить источник</button>`);
+  },
+  'kb-del': async (b) => {
+    const k = S.knowledge[+b.dataset.i];
+    closeSheet();
+    if(NET.on && k && k.id){
+      try { const r = await NET.req('/api/knowledge/remove', { id: k.id }); S.knowledge = r.knowledge; }
+      catch(e){ return netErr(e); }
+    } else S.knowledge.splice(+b.dataset.i, 1);
+    save(); haptic('warn'); paint('knowledge', false);
+  },
+
+  /* --- ai settings --- */
+  'add-banned': () => inputSheet('Запрещённая тема','AI не будет это обсуждать','например: конкуренты','', v => {
+    S.ai.banned.push(v); save(); pushAI(); const n = $('#banned'); if(n) n.innerHTML = bannedChips(); renderPreview(); haptic('ok');
+  }, 'Добавить'),
+  'rm-banned': (b) => { S.ai.banned.splice(+b.dataset.i, 1); save(); pushAI(); const n = $('#banned'); if(n) n.innerHTML = bannedChips(); renderPreview(); haptic('sel'); },
+  'preview-refresh': () => { previewQ++; renderPreview(); haptic('light'); },
+  'save-ai': async () => {
+    if(NET.on){ try { await NET.req('/api/ai', { patch: S.ai }); } catch(e){ return netErr(e); } }
+    save(); haptic('ok'); toast('Настройки применены — AI отвечает по-новому');
+  },
+
+  /* --- analytics --- */
+  'pick-period': () => pickSheet('Период', [['7','7 дней'],['30','30 дней'],['90','90 дней']], String(S.period),
+    v => { S.period = +v; save(); paint('analytics', false); }),
+
+  /* --- channel --- */
+  'ch-kind': (b) => { channelKind = b.dataset.k; channelPost = null; haptic('sel'); paint('channel', false); },
+  'ch-gen': async () => {
+    const p = $('#chPreview'); if(p) p.innerHTML = `<div class="skel" style="height:150px;border-radius:14px"></div>`;
+    if(NET.on){
+      try {
+        const r = await NET.req('/api/channel/post', { topic: channelTopic, kind: channelKind });
+        channelPost = r.text;
+        if($('#chPreview')) $('#chPreview').innerHTML = channelPreview();
+        haptic('ok');
+      } catch(e){
+        channelPost = null; genPost();
+        if($('#chPreview')) $('#chPreview').innerHTML = channelPreview();
+        netErr(e);
+      }
+      return;
+    }
+    setTimeout(()=>{ channelPost = null; genPost(); if($('#chPreview')) $('#chPreview').innerHTML = channelPreview(); haptic('ok'); }, 800);
+  },
+  'ch-publish': () => {
+    sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Опубликовать пост?</div>
+        <div class="sub-s">Пост уйдёт в канал сразу и увидят все подписчики.</div></div>
+      <div class="box" style="border-radius:16px;font:400 14px/1.5 var(--f);color:var(--ink2)">${(channelPost||genPost()).replace(/\n/g,'<br>')}</div>
+      <button class="btn" data-act="ch-publish-ok">Опубликовать</button>
+      <button class="link" data-act="close-sheet">Отмена</button>`);
+  },
+  'ch-publish-ok': () => { closeSheet(); haptic('ok'); toast('Пост опубликован в канале'); },
+  'ch-schedule': () => pickSheet('Когда опубликовать', [['1','Через час'],['e','Сегодня в 19:00'],['t','Завтра в 11:00']], '',
+    v => { toast('Пост запланирован'); haptic('ok'); }),
+
+  /* --- more --- */
+  'more-go': (b) => {
+    const k = b.dataset.k;
+    if(k === 'knowledge' || k === 'analytics' || k === 'channel'){ go(k); return; }
+    if(k === 'team'){ teamEdit = true; paint('team', false); return; }
+    if(k === 'billing'){
+      const u = S.usage;
+      sheet(`<div class="h5" style="font-size:19px">${NET.on ? 'Расход AI' : 'Billing'}</div>
+        ${NET.on && u ? `<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:12px">
+            ${NET.quota && NET.quota.dailyLimit ? `<div class="between"><div class="cap" style="font-size:13px">Сегодня использовано</div><div style="font:600 15px/1 var(--m)">${NET.quota.usedToday} / ${NET.quota.dailyLimit}</div></div>` : ''}
+            <div class="between"><div class="cap" style="font-size:13px">Обращений к модели</div><div style="font:600 15px/1 var(--m)">${nf(u.calls)}</div></div>
+            <div class="between"><div class="cap" style="font-size:13px">Токенов на вход</div><div style="font:600 15px/1 var(--m)">${nf(u.tokensIn)}</div></div>
+            <div class="between"><div class="cap" style="font-size:13px">Токенов на выход</div><div style="font:600 15px/1 var(--m)">${nf(u.tokensOut)}</div></div>
+            <div class="between"><div class="cap" style="font-size:13px">Сбоев AI</div><div style="font:600 15px/1 var(--m)">${nf(u.errors)}</div></div>
+          </div>
+          <div class="cap">Считается на вашем сервере. Стоимость смотрите в консоли Groq — тарификация по токенам.</div>`
+        : `<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:10px">
+            <div class="between"><div style="font:600 16px/1 var(--f)">Демо-режим</div><div class="badge ai">OFFLINE</div></div>
+            <div class="cap">Приложение открыто без сервера — расход AI считать нечего.</div>
+          </div>`}
+        <button class="btn ghost" data-act="close-sheet">Закрыть</button>`);
+      return;
+    }
+    sheet(`<div class="h5" style="font-size:19px">Settings</div>
+      <div class="list plain" style="padding:0 16px">
+        <div class="between"><div style="font:500 15px/1 var(--f)">Бот</div><div class="cap">${S.bot.username ? '@' + esc(S.bot.username) : 'не подключён'}</div></div>
+        ${S.bot.mask ? `<div class="between"><div style="font:500 15px/1 var(--f)">Токен</div><div class="cap" style="font-family:var(--m)">${esc(S.bot.mask)}</div></div>` : ''}
+        <div class="between"><div style="font:500 15px/1 var(--f)">Приём сообщений</div><div class="cap" id="diag-mode">${NET.on ? (NET.mode === 'webhook' ? 'вебхук' : 'опрос Telegram') : 'демо-режим'}</div></div>
+        <div class="between"><div style="font:500 15px/1 var(--f)">Модель</div><div class="cap" id="diag-model">${NET.on ? (NET.aiReady ? 'проверяю…' : 'не настроена') : 'локальные правила'}</div></div>
+        <div class="between"><div style="font:500 15px/1 var(--f)">Язык интерфейса</div><div class="cap">Русский</div></div>
+      </div>
+      ${NET.on ? `<button class="btn ghost" style="color:#C93A3A" data-act="disconnect-bot">Отключить бота</button>` : ''}
+      <button class="btn ghost" data-act="close-sheet">Закрыть</button>`, async () => {
+        if(!NET.on || !NET.aiReady) return;
+        try { const r = await NET.req('/api/diag', {}); const n = $('#diag-model'); if(n) n.textContent = r.diag.model || r.diag.modelError || '—'; }
+        catch(e){ const n = $('#diag-model'); if(n) n.textContent = 'ошибка: ' + e.message; }
+      });
+  },
+  'disconnect-bot': async () => {
+    closeSheet();
+    try { await NET.req('/api/bot/disconnect', {}); } catch(e){ return netErr(e); }
+    S.bot = { token:'', name:'', username:'', subs:0, connected:false };
+    save(); haptic('warn'); toast('Бот отключён — клиенты больше не получают ответы');
+    paint(current, false);
+  },
+  'open-bot': () => {
+    if(!NET.bot) return;
+    const url = 'https://t.me/' + NET.bot;
+    if(TG && TG.openTelegramLink) TG.openTelegramLink(url); else window.open(url, '_blank');
+    // вернётся — перепроверим, снялась ли блокировка
+    setTimeout(()=>{ NET.req('/api/notify/check', {}).then(r => {
+      NET.notifyOk = r.reachable;
+      if(r.reachable){ toast('Уведомления включены'); paint(current, false); }
+    }).catch(()=>{}); }, 3000);
+  },
+  ext: (b) => {
+    const url = b.dataset.url;
+    if(TG && TG.openLink) TG.openLink(url); else window.open(url, '_blank');
+  },
+  'delete-account': () => {
+    const d = S.dialogs.length, k = S.knowledge.length;
+    sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Удалить кабинет?</div>
+        <div class="sub-s">Безвозвратно удалим ${d} ${plural(d,'диалог','диалога','диалогов')}, ${k} ${plural(k,'источник','источника','источников')} базы знаний, настройки и токен вашего бота. Бот перестанет отвечать клиентам.</div></div>
+      <div class="field"><div class="lbl">Введите УДАЛИТЬ для подтверждения</div>
+        <div class="inp"><input id="del-confirm" placeholder="УДАЛИТЬ" autocapitalize="characters"></div></div>
+      <button class="btn" id="del-ok" style="background:#C93A3A">Удалить навсегда</button>
+      <button class="link" data-act="close-sheet">Отмена</button>`, el => {
+      $('#del-ok', el).addEventListener('click', async () => {
+        const v = $('#del-confirm', el).value.trim().toUpperCase();
+        if(v !== 'УДАЛИТЬ'){ toast('Введите слово УДАЛИТЬ'); return; }
+        try { await NET.req('/api/account/delete', { confirm: 'УДАЛИТЬ' }); }
+        catch(e){ return netErr(e); }
+        closeSheet();
+        try { localStorage.removeItem(KEY); } catch(e){}
+        if(ES){ ES.close(); ES = null; }
+        S = seed(); NET.me = null;
+        haptic('warn'); stack = []; paint('welcome', false);
+        toast('Кабинет удалён');
+      });
+    });
+  },
+  restart: () => {
+    sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Пройти настройку заново?</div>
+        <div class="sub-s">Диалоги и клиенты сохранятся. Настройки бота и AI можно будет изменить.</div></div>
+      <button class="btn" data-act="restart-ok">Начать заново</button>
+      <button class="link" data-act="close-sheet">Отмена</button>`);
+  },
+  'team-done': () => { teamEdit = false; save(); haptic('ok'); paint('more', true); },
+  'restart-ok': () => { closeSheet(); teamEdit = false; S.step = 0; save(); stack = []; go('welcome'); }
+};
+
+/**
+ * Добавление источника в базу знаний.
+ * С бэкендом текст реально уходит на сервер и попадает в промпт AI:
+ * можно вставить текст, приложить текстовый файл (txt/md/csv/json) или дать ссылку.
+ */
+const KB_KIND_TITLE = { text:'Текст для AI', doc:'Документ', price:'Товары и цены', rules:'Правила', faq:'Частые вопросы', web:'Ссылка' };
+const KB_KIND_HINT = () => ({
+  text:  'Что важно знать про вашу работу: график, самовывоз, гарантии.',
+  doc:   NET.on ? 'Приложите PDF, DOCX или вставьте текст документа.'
+                : 'Вставьте текст документа или приложите .txt, .md, .csv.',
+  price: NET.on ? 'Приложите XLSX или CSV с прайсом — или вставьте текстом, по строке на позицию.'
+                : 'Вставьте прайс текстом или приложите CSV — по строке на позицию с ценой.',
+  rules: 'Доставка, оплата, возврат — своими словами.',
+  faq:   'Частые вопросы и ответы на них, по строке на пару.',
+  web:   'Адрес страницы — прочитаем её и положим текст в базу знаний.',
+});
+
+function kbSheet(kind){
+  const isWeb = kind === 'web';
+  sheet(`<div class="col g8"><div class="h5" style="font-size:19px">${esc(KB_KIND_TITLE[kind] || 'Источник')}</div>
+      <div class="sub-s">${esc(KB_KIND_HINT()[kind] || '')}</div></div>
+    <div class="field"><div class="lbl">Название</div>
+      <div class="inp"><input id="kb-title" placeholder="${isWeb ? 'nordlight.ru' : 'Каталог 2026'}"></div></div>
+    ${isWeb ? '' : `<div class="field"><div class="lbl">Текст</div>
+      <div class="inp"><textarea id="kb-body" rows="7" placeholder="Вставьте текст…"></textarea></div>
+      <label class="chip add" style="align-self:flex-start;cursor:pointer" id="kb-pick">Приложить файл
+        <input type="file" id="kb-file" accept=".pdf,.docx,.xlsx,.xlsm,.txt,.md,.csv,.tsv,.json,.html" style="display:none"></label>
+      <div class="hint" id="kb-note">${NET.on
+        ? 'PDF, DOCX, XLSX, CSV или TXT — прочитаем на сервере. Сканы без текстового слоя не подойдут.'
+        : 'Без сервера читаем только текстовые файлы. Вставьте текст вручную.'}</div></div>`}
+    <button class="btn" id="kb-ok">${isWeb ? 'Прочитать страницу' : 'Добавить в базу'}</button>`, el => {
+    const title = $('#kb-title', el), bodyEl = $('#kb-body', el), note = $('#kb-note', el);
+    const file = $('#kb-file', el);
+    if(file) file.addEventListener('change', async () => {
+      const f = file.files && file.files[0];
+      if(!f) return;
+      if(f.size > 8 * 1024 * 1024){ note.textContent = 'Файл больше 8 МБ — пришлите часть или ссылку.'; note.classList.add('err'); return; }
+      note.classList.remove('err');
+
+      if(NET.on){
+        // Разбор PDF/DOCX/XLSX делает сервер — он же скажет, если файл нечитаемый.
+        note.textContent = 'Читаю ' + f.name + '…';
+        const pick = $('#kb-pick', el); if(pick) pick.style.opacity = '.5';
+        try {
+          const r = await NET.upload(f, title.value.trim());
+          S.knowledge = r.knowledge; save(); haptic('ok');
+          closeSheet();
+          toast(r.title + ' — ' + Math.round(r.chars / 100) / 10 + ' тыс. знаков в базе');
+          paint('knowledge', false);
+        } catch(e){
+          // Файл не прочитался — сразу показываем работающий путь, а не тупик.
+          note.innerHTML = esc(e.message) + '<br><b style="color:var(--ink3)">Вставьте текст в поле выше — это сработает всегда.</b>';
+          note.classList.add('err'); haptic('warn');
+          if(!title.value) title.value = f.name.replace(/\.[a-z0-9]+$/i, '');
+          bodyEl.focus();
+        } finally {
+          if(pick) pick.style.opacity = '';
+          file.value = '';
+        }
+        return;
+      }
+
+      if(!/\.(txt|md|csv|tsv|json)$/i.test(f.name)){
+        note.textContent = 'Без сервера читаю только txt, md, csv и json.'; note.classList.add('err'); return;
+      }
+      const r = new FileReader();
+      r.onload = () => {
+        bodyEl.value = String(r.result || '').slice(0, 60000);
+        if(!title.value) title.value = f.name.replace(/\.[a-z0-9]+$/i, '');
+        note.textContent = f.name + ' — ' + Math.round(bodyEl.value.length / 100) / 10 + ' тыс. знаков';
+      };
+      r.onerror = () => { note.textContent = 'Не смог прочитать файл'; note.classList.add('err'); };
+      r.readAsText(f);
+    });
+    setTimeout(()=>title.focus(), 260);
+    $('#kb-ok', el).addEventListener('click', async () => {
+      const t = title.value.trim();
+      if(isWeb){
+        if(!t) return toast('Укажите адрес страницы');
+        closeSheet(); toast('Читаем ' + t + '…');
+        if(!NET.on){ addKB(Object.assign({}, KB_PRESET.web, { title:t, ready:true })); paint('knowledge', false); return; }
+        try { const r = await NET.req('/api/knowledge/import', { url: t }); S.knowledge = r.knowledge; save(); haptic('ok');
+          toast('Готово: ' + Math.round(r.chars/1000) + ' тыс. знаков'); paint('knowledge', false); }
+        catch(e){ netErr(e); }
+        return;
+      }
+      const body = bodyEl.value.trim();
+      if(!t) return toast('Дайте источнику название');
+      if(!body) return toast('Вставьте текст или приложите файл');
+      closeSheet();
+      if(!NET.on){
+        addKB({ badge: (KB_PRESET[kind] || KB_PRESET.text).badge, title: t, meta: Math.round(body.length/100)/10 + ' тыс. знаков', kind, ready: true, body });
+        save(); haptic('ok'); paint('knowledge', false); return;
+      }
+      try { const r = await NET.req('/api/knowledge/add', { kind, title: t, body }); S.knowledge = r.knowledge; save(); haptic('ok');
+        toast('AI переобучен на этом источнике'); paint('knowledge', false); }
+      catch(e){ netErr(e); }
+    });
+  });
+}
+
+function addKB(item){
+  const i = S.knowledge.findIndex(k => k.kind === item.kind && k.title === item.title);
+  if(i >= 0) S.knowledge[i] = item; else S.knowledge.push(item);
+  save();
+  return item;
+}
+function repaintMats(){ const n = $('#mats'); if(n) n.innerHTML = matList(); }
+
+/* ---------- делегирование событий ---------- */
+document.addEventListener('click', e => {
+  const tabBtn = e.target.closest('[data-tab]');
+  const el = e.target.closest('[data-act]');
+  if(el){
+    const a = el.dataset.act;
+    if(ACT[a]){ e.preventDefault(); ACT[a](el, e); return; }
+  }
+  if(tabBtn && tabBtn.classList.contains('tab')){ ACT.tab(tabBtn); }
+});
+
+/* ============================================================
+   Инициализация
+   ============================================================ */
+async function init(){
+  load();
+  if(TG){
+    try{
+      TG.ready(); TG.expand();
+      if(TG.setHeaderColor) TG.setHeaderColor('#FFFFFF');
+      if(TG.setBackgroundColor) TG.setBackgroundColor('#FFFFFF');
+      if(TG.disableVerticalSwipes) TG.disableVerticalSwipes();
+      TG.BackButton.onClick(() => back());
+      const u = TG.initDataUnsafe && TG.initDataUnsafe.user;
+      if(u && !S.team.length && S.onboarded)
+        S.team.push({ name:[u.first_name,u.last_name].filter(Boolean).join(' '), un:u.username||'me', role:'владелец', dept:'Sales' });
+    }catch(e){}
+  }
+  const start = S.onboarded ? (VIEWS[S.view] && !ONB.includes(S.view) ? S.view : 'home') : (S.step ? ONB[Math.min(S.step, ONB.length-1)] : 'welcome');
+  paint(start, false);
+  save();
+
+  /* С бэкендом источник правды — сервер: перерисовываем по его состоянию. */
+  if(NET.on){
+    NET.initData = (TG && TG.initData) || (CFG && CFG.devInitData) || '';
+    try {
+      const r = await NET.req('/api/state', {});
+      NET.me = r.me; NET.ready = true;
+      applyState(r.state);
+      // Диплинк из уведомления «AI передал диалог»: t.me/bot?startapp=d<chatId>
+      const start = (TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param) || '';
+      const wantChat = /^d(-?\d+)$/.exec(start);
+      let view = S.onboarded ? (VIEWS[S.view] && !ONB.includes(S.view) ? S.view : 'home')
+                             : (S.step ? ONB[Math.min(S.step, ONB.length-1)] : 'welcome');
+      if(wantChat && S.dialogs.some(d => d.id === wantChat[1])){
+        S.openChat = wantChat[1];
+        view = 'chat';
+      }
+      stack = view === 'chat' ? ['inbox'] : [];
+      paint(view, false);
+      openStream();
+      // Тихо выясняем, сможет ли бот написать владельцу про переданные диалоги.
+      if(S.onboarded) NET.req('/api/notify/check', {}).then(r => {
+        if(NET.notifyOk !== r.reachable){ NET.notifyOk = r.reachable; if(current === 'home') paint('home', false); }
+      }).catch(()=>{});
+    } catch(e){
+      NET.ready = false;
+      toast(/подпись|401/i.test(e.message) ? 'Откройте приложение из Telegram — иначе сервер не пускает' : 'Сервер недоступен: ' + e.message);
+    }
+  }
+
+  /* Офлайн-демо: имитируем входящие. С бэкендом это не нужно — пишут реальные клиенты. */
+  setInterval(() => {
+    if(NET.on) return;
+    if(!S.onboarded || current !== 'chat') return;
+    const d = S.dialogs.find(x=>x.id===S.openChat);
+    if(!d || d.status === 'closed') return;
+    if(now() - d.ts < 40000) return;
+    if(Math.random() > 0.35) return;
+    const qs = ['А доставка когда будет?','Можно фото?','Сколько по деньгам выйдет?','Есть в наличии сейчас?'];
+    simulateIncoming(d, qs[Math.floor(Math.random()*qs.length)]);
+  }, 15000);
+}
+init();
+</script>
+</body>
+</html>

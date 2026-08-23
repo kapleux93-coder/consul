@@ -1,0 +1,10 @@
+# Секреты и данные пользователей — в репозиторий не попадают никогда
+.env
+consul-server/.env
+consul-server/data/
+**/.enc-key
+
+# Служебное
+node_modules/
+*.log
+.DS_Store

@@ -1,0 +1,15 @@
+{
+  "name": "consul-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for the Consul Telegram mini app: connects the owner's bot, answers clients with Groq, hands dialogs over to human managers.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "ALLOW_INSECURE_AUTH=1 node server.js",
+    "test": "node test-store.js && node test-auth.js && node test-groq.js && node test-extract.js && node test-limits.js && node test-backup.js && node test-ai.js && node test-api.js",
+    "models": "node groq.js --list",
+    "setup": "node setup.js"
+  },
+  "engines": { "node": ">=18" }
+}
