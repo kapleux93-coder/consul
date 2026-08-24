@@ -60,6 +60,71 @@ function answer(system, question) {
   };
 }
 
+/** Реплики «клиента» по кругу — достаточно, чтобы прогнать сценарий. */
+function customerTurn(system, msgs) {
+  const turns = msgs.filter(m => m.role === 'assistant').length;
+  const byScenario = {
+    'помочь выбрать': [
+      'Здравствуйте! Подскажите, что взять для гостиной?',
+      'А подешевле есть что-то похожее?',
+      'Понял. А чем они отличаются по свету?',
+      'Ок, спасибо, подумаю.',
+    ],
+    'доставки': [
+      'Здравствуйте, в Казань за сколько доставите?',
+      'А если сегодня оплачу, когда приедет?',
+      'Хорошо. Курьер до двери привезёт?',
+      'Спасибо, всё понятно.',
+    ],
+    'скидку': [
+      'Добрый день. А скидка какая-то есть?',
+      'У других дешевле видел. Подвинетесь?',
+      'А если возьму две штуки?',
+      'Ладно, подумаю ещё.',
+    ],
+    'позже обещанного': [
+      'Здравствуйте. Заказ обещали вчера, его до сих пор нет.',
+      'И что мне теперь делать? Он нужен был к выходным.',
+      'Хорошо, жду ответа сегодня.',
+    ],
+    'большая партия': [
+      'Добрый день. Нужно 30 штук для офиса, какие условия?',
+      'А счёт на юрлицо сделаете?',
+      'Отлично, пришлите реквизиты.',
+    ],
+  };
+  const key = Object.keys(byScenario).find(k => system.includes(k)) || 'помочь выбрать';
+  const list = byScenario[key];
+  const message = list[Math.min(turns, list.length - 1)];
+  return { message, done: turns >= list.length - 1 };
+}
+
+/** Грубый разбор стиля: считаем то же, что считала бы модель. */
+function styleProfile(text) {
+  const replies = text.split('\n').slice(1).map(l => l.replace(/^\d+\.\s*/, '')).filter(Boolean);
+  const joined = replies.join(' ');
+  const avgWords = replies.length ? Math.round(joined.split(/\s+/).length / replies.length) : 0;
+  const hasEmoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(joined);
+  const formal = /вы\b|Вы\b|пожалуйста|добрый день/i.test(joined);
+  const excl = (joined.match(/!/g) || []).length;
+
+  const traits = [];
+  traits.push(avgWords < 8 ? 'очень короткие ответы' : avgWords < 20 ? 'короткие ответы' : 'развёрнутые ответы');
+  traits.push(formal ? 'обращается на «вы»' : 'общается неформально');
+  traits.push(hasEmoji ? 'использует смайлы' : 'без смайлов');
+  if (excl > replies.length / 2) traits.push('часто ставит восклицательный знак');
+
+  const lengthVal = avgWords < 8 ? 15 : avgWords < 20 ? 45 : 80;
+  return {
+    summary: 'Пишет ' + traits[0] + ', ' + traits[1] + '.',
+    style: hasEmoji || excl > 1 ? 'friendly' : formal ? 'formal' : 'neutral',
+    lengthVal,
+    traits,
+    instructions: 'Отвечай так же: ' + traits.join(', ') + '. Держи ту же длину и тот же тон.',
+    examples: replies.slice(0, 3),
+  };
+}
+
 http.createServer((req, res) => {
   let raw = '';
   req.on('data', c => raw += c);
@@ -75,10 +140,16 @@ http.createServer((req, res) => {
     const last = [...msgs].reverse().find(m => m.role === 'user');
     const question = (last && last.content) || '';
 
-    const isPost = /посты для Telegram-канала/.test(system);
-    const content = isPost
-      ? JSON.stringify({ text: 'Привезли новое — ' + question.replace(/^Формат:.*Тема:\s*/i, '') + '.\n\nПодобрать вариант можно прямо в боте: напишите, что нужно.' })
-      : JSON.stringify(answer(system, question));
+    let content;
+    if (/посты для Telegram-канала/.test(system)) {
+      content = JSON.stringify({ text: 'Привезли новое — ' + question.replace(/^Формат:.*Тема:\s*/i, '') + '.\n\nПодобрать вариант можно прямо в боте: напишите, что нужно.' });
+    } else if (/Ты играешь ПОКУПАТЕЛЯ/.test(system)) {
+      content = JSON.stringify(customerTurn(system, msgs));
+    } else if (/разбираешь манеру письма продавца/.test(system)) {
+      content = JSON.stringify(styleProfile(question));
+    } else {
+      content = JSON.stringify(answer(system, question));
+    }
 
     setTimeout(() => {
       res.writeHead(200, { 'content-type': 'application/json' });

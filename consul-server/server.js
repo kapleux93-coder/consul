@@ -642,6 +642,79 @@ const routes = {
     ok(res, { ok: true, reply: r.reply, handoff: r.handoff, reason: r.reason, ms: Date.now() - t0, model: r.model, sources: used, fallback: !!r.fallback, error: r.error || '' });
   },
 
+  /* ---- тренировка стиля: AI играет клиента, владелец отвечает как продавец ---- */
+  'POST /api/style/scenarios': async (req, res, body, user) => {
+    ok(res, { ok: true, scenarios: ai.SCENARIOS.map(s => ({ id: s.id, title: s.title })) });
+  },
+
+  'POST /api/style/next': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    if (!groq.enabled()) return fail(res, 503, 'AI не настроен: нет GROQ_API_KEY');
+    const q = limits.checkAiQuota(w);
+    if (!q.ok) return fail(res, 429, 'Дневной лимит обращений к AI исчерпан. Обновится завтра.');
+
+    const history = (Array.isArray(body.history) ? body.history : []).slice(-16)
+      .map(m => ({ r: m.r === 'client' ? 'client' : 'owner', t: clean(m.t, 600) }))
+      .filter(m => m.t);
+    try {
+      const r = await ai.customerMessage(w, history, clean(body.scenario, 20));
+      limits.spendAi(w);
+      w.usage.calls++;
+      w.usage.tokensIn += (r.usage && r.usage.prompt_tokens) || 0;
+      w.usage.tokensOut += (r.usage && r.usage.completion_tokens) || 0;
+      store.save(w);
+      ok(res, { ok: true, message: r.message, done: r.done, scenario: { id: r.scenario.id, title: r.scenario.title } });
+    } catch (e) { fail(res, 502, 'Groq: ' + e.message); }
+  },
+
+  'POST /api/style/analyze': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    if (!groq.enabled()) return fail(res, 503, 'AI не настроен: нет GROQ_API_KEY');
+    const replies = (Array.isArray(body.replies) ? body.replies : [])
+      .map(t => clean(t, 600)).filter(Boolean).slice(0, 20);
+    if (replies.length < 3) return fail(res, 400, 'Нужно хотя бы три ваших ответа — по двум манеру не понять');
+
+    const q = limits.checkAiQuota(w);
+    if (!q.ok) return fail(res, 429, 'Дневной лимит обращений к AI исчерпан. Обновится завтра.');
+    try {
+      const profile = await ai.analyzeStyle(w, replies);
+      limits.spendAi(w);
+      w.usage.calls++;
+      w.usage.tokensIn += (profile.usage && profile.usage.prompt_tokens) || 0;
+      w.usage.tokensOut += (profile.usage && profile.usage.completion_tokens) || 0;
+      delete profile.usage;
+      w.ai.styleDraft = profile;          // черновик: применяется только по кнопке
+      store.save(w);
+      ok(res, { ok: true, profile });
+    } catch (e) { fail(res, 502, e.message); }
+  },
+
+  'POST /api/style/apply': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    const p = w.ai.styleDraft;
+    if (!p) return fail(res, 400, 'Нечего применять — сначала пройдите тренировку');
+    w.ai.styleProfile = {
+      summary: p.summary, traits: p.traits, instructions: p.instructions,
+      examples: p.examples, trainedAt: p.trainedAt,
+    };
+    if (body.applySettings !== false) {
+      w.ai.style = p.style;
+      w.ai.lengthVal = p.lengthVal;
+      w.ai.length = p.lengthVal < 34 ? 'short' : p.lengthVal < 67 ? 'mid' : 'long';
+    }
+    delete w.ai.styleDraft;
+    store.save(w);
+    ok(res, { ok: true, ai: w.ai });
+  },
+
+  'POST /api/style/forget': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    delete w.ai.styleProfile;
+    delete w.ai.styleDraft;
+    store.save(w);
+    ok(res, { ok: true, ai: w.ai });
+  },
+
   /* ---- диалоги ---- */
   'POST /api/dialog/send': async (req, res, body, user) => {
     const w = store.getOrCreate(user.id);

@@ -441,7 +441,9 @@ function applyState(st){
   S.step = st.step || 0;
   S.bot = { token:'', name: st.bot.name, username: st.bot.username, subs: st.bot.subs, connected: st.bot.connected, mask: st.bot.tokenMask };
   S.biz = Object.assign({ docs: S.biz.docs || [] }, st.biz);
-  S.ai = Object.assign({}, S.ai, st.ai);
+  // Собираем от дефолтов, а не поверх текущего: иначе удалённые на сервере
+  // поля (например, снятый профиль стиля) остались бы висеть в клиенте.
+  S.ai = Object.assign({}, seed().ai, st.ai);
   S.team = st.team || [];
   S.depts = st.depts || S.depts;
   S.knowledge = st.knowledge || [];
@@ -630,6 +632,7 @@ function go(view, opts){
 
 function back(){
   if(current === 'team' && teamEdit){ teamEdit = false; paint('more', true); return; }
+  if(current === 'styletrain'){ train = null; paint('aiset', true); return; }
   if(ONB.includes(current)){
     const i = ONB.indexOf(current);
     if(i > 0){ S.step = Math.max(0, i - 1); save(); paint(ONB[i-1], true); return; }
@@ -1432,6 +1435,123 @@ ${tabbar('more')}`;
 };
 
 /* ---------- AI Settings ---------- */
+/** Карточка снятого голоса компании в настройках AI. */
+function voiceCard(){
+  const p = S.ai.styleProfile;
+  if(!p) return `<button class="box" style="border-radius:18px;display:flex;align-items:center;gap:13px;width:100%;text-align:left" data-act="style-train">
+    <div class="av warm" style="width:38px;height:38px;border-radius:12px">${I.spark('#F26722',18)}</div>
+    <div class="f1 col g4">
+      <div style="font:600 15px/1.2 var(--f)">Научить AI писать как вы</div>
+      <div class="cap2">Ответите клиенту пару раз — снимем вашу манеру</div>
+    </div>
+    <div style="color:#C4C8CD;font:400 18px/1 var(--f)">›</div>
+  </button>`;
+  return `<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:11px">
+    <div class="between">
+      <div class="row g8">${I.spark('#F26722',16)}<div style="font:600 14px/1 var(--f)">Ваш голос</div></div>
+      <button class="a" style="font-size:12px" data-act="style-train">Обновить</button>
+    </div>
+    <div style="font:400 13px/1.45 var(--f);color:var(--ink2)">${esc(p.summary)}</div>
+    ${p.traits && p.traits.length ? `<div class="row wrap g7">${p.traits.map(t=>`<div class="chip" style="background:var(--card);border:1px solid var(--line);font-size:12px;padding:7px 11px">${esc(t)}</div>`).join('')}</div>` : ''}
+    <button class="chip out" style="align-self:flex-start;font-size:12px;padding:7px 12px" data-act="style-forget">Убрать голос</button>
+  </div>`;
+}
+
+/* ---------- Тренировка стиля: AI играет клиента ---------- */
+
+let train = null;   // { scenario, log:[{r:'client'|'owner', t}], profile, busy }
+
+VIEWS.styletrain = () => {
+  const t = train || {};
+  const replies = (t.log || []).filter(m => m.r === 'owner').length;
+  const enough = replies >= 3;
+  return `
+${topbar('Ваш голос', '')}
+<div class="body" style="background:#FBFAF8">
+  ${!t.scenario ? `
+  <div class="pad g18">
+    <div class="col g8">
+      <div class="h2">Ответьте клиенту сами</div>
+      <div class="sub">AI сыграет покупателя, а вы отвечайте как обычно отвечаете вы. По вашим ответам разберём манеру и научим бота писать так же.</div>
+    </div>
+    <div class="col g9">
+      <div class="lbl">Какой клиент напишет</div>
+      <div class="col g9" id="scenarios">${scenarioCards()}</div>
+    </div>
+    <div class="box warm" style="border-radius:16px">Пишите как есть — коротко, длинно, со смайлами или без. Чем естественнее, тем точнее выйдет.</div>
+  </div>` : `
+  <div class="col g10" style="padding:18px;flex:1" id="trainFeed">${trainMsgs()}</div>
+  <div style="flex:none;padding:0 18px calc(16px + var(--safe-bot));display:flex;flex-direction:column;gap:10px">
+    <div class="between">
+      <div class="cap2">${t.scenario.title} · ваших ответов: ${replies}${enough ? '' : ' из 3'}</div>
+      ${enough ? `<button class="a" data-act="style-analyze">Разобрать стиль</button>` : ''}
+    </div>
+    <div class="composer"><input id="trainInp" placeholder="Ответьте клиенту…" ${t.busy?'disabled':''}>
+      <button class="send" data-act="train-send">${I.arrow()}</button></div>
+  </div>`}
+</div>`;
+};
+
+function scenarioCards(){
+  const list = train && train.scenarios ? train.scenarios : [];
+  if(!list.length) return `<div class="box plain skel" style="height:60px;border-radius:16px"></div>`;
+  return list.map(sc=>`<button class="box plain" style="border-radius:16px;padding:15px;display:flex;align-items:center;gap:12px;width:100%;text-align:left" data-act="train-start" data-sc="${esc(sc.id)}">
+    <div class="av" style="width:36px;height:36px;border-radius:11px;font-size:13px">${esc(sc.title[0])}</div>
+    <div class="f1" style="font:600 15px/1.2 var(--f)">${esc(sc.title)}</div>
+    <div style="color:#C4C8CD;font:400 18px/1 var(--f)">›</div>
+  </button>`).join('');
+}
+
+function trainMsgs(){
+  const t = train || { log: [] };
+  return t.log.map(m => m.r === 'client'
+    ? `<div class="bub in">${esc(m.t)}</div>`
+    : `<div class="bub out">${esc(m.t)}</div>`).join('') +
+    (t.busy ? `<div class="typing"><i></i><i></i><i></i></div>` : '');
+}
+
+MOUNT.styletrain = el => {
+  if(!train) train = { scenarios: null, log: [] };
+  if(!train.scenarios){
+    NET.req('/api/style/scenarios', {}).then(r => {
+      train.scenarios = r.scenarios;
+      const n = $('#scenarios', el); if(n) n.innerHTML = scenarioCards();
+    }).catch(netErr);
+  }
+  const inp = $('#trainInp', el);
+  if(inp){ inp.addEventListener('keydown', e => { if(e.key === 'Enter') trainSend(); }); inp.focus(); }
+  const f = $('#trainFeed', el); if(f) f.parentElement.scrollTop = f.parentElement.scrollHeight;
+};
+
+function refreshTrain(){
+  const el = $('#v-styletrain'); if(!el) return;
+  const f = $('#trainFeed', el);
+  if(!f) return paint('styletrain', false);
+  f.innerHTML = trainMsgs();
+  f.parentElement.scrollTop = f.parentElement.scrollHeight;
+}
+
+/** Просит у сервера следующую реплику клиента. */
+async function trainNext(){
+  train.busy = true; refreshTrain();
+  try {
+    const r = await NET.req('/api/style/next', { history: train.log, scenario: train.scenario.id });
+    train.log.push({ r: 'client', t: r.message });
+    train.done = r.done;
+  } catch(e){ netErr(e); }
+  train.busy = false;
+  paint('styletrain', false);
+}
+
+async function trainSend(){
+  const inp = $('#trainInp'); if(!inp) return;
+  const text = inp.value.trim(); if(!text || train.busy) return;
+  inp.value = '';
+  train.log.push({ r: 'owner', t: text });
+  haptic('light');
+  await trainNext();
+}
+
 VIEWS.aiset = () => `
 <div class="body"><div class="pad-core g16">
   <div class="between"><div class="h3">AI Settings</div>
@@ -1439,6 +1559,7 @@ VIEWS.aiset = () => `
   <div class="col g12">
     <div class="field"><div class="lbl">Имя AI-менеджера</div>
       <div class="inp"><input id="aiName" value="${esc(S.ai.name)}" placeholder="Ника"></div></div>
+    ${NET.on ? voiceCard() : ''}
     <div class="row g10" style="align-items:stretch">
       <div class="f1 field"><div class="lbl">Стиль</div>
         <button class="inp" data-act="pick-style">${styleName(S.ai.style)}<span style="color:var(--muted6)">▾</span></button></div>
@@ -1703,6 +1824,23 @@ const KB_PRESET = {
   faq:   { badge:'FAQ', title:'Частые вопросы', meta:'14 вопросов', kind:'faq' },
   web:   { badge:'WEB', title:'Сайт',        meta:'страницы сайта', kind:'web' }
 };
+
+/** Результат разбора манеры: что увидел AI и что предлагает применить. */
+function showProfile(p){
+  sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Вот как вы пишете</div>
+      <div class="sub-s">${esc(p.summary)}</div></div>
+    ${p.traits && p.traits.length ? `<div class="row wrap g7">${p.traits.map(t=>`<div class="chip tag" style="font-size:13px">${esc(t)}</div>`).join('')}</div>` : ''}
+    <div class="box" style="border-radius:16px;display:flex;flex-direction:column;gap:8px">
+      <div class="lbl">Что получит бот</div>
+      <div style="font:400 13px/1.5 var(--f);color:var(--ink3)">${esc(p.instructions)}</div>
+    </div>
+    <div class="list plain" style="padding:0 16px">
+      <div class="between"><div class="cap" style="font-size:13px">Стиль</div><div style="font:500 13px/1 var(--f)">${styleName(p.style)}</div></div>
+      <div class="between"><div class="cap" style="font-size:13px">Длина ответов</div><div style="font:500 13px/1 var(--f)">${lenPhrase(p.lengthVal)}</div></div>
+    </div>
+    <button class="btn" data-act="style-apply">Применить к боту</button>
+    <button class="link" data-act="close-sheet">Не сейчас</button>`);
+}
 
 /** Показывает ссылку-приглашение: менеджер жмёт её и начинает получать передачи. */
 function inviteSheet(name, link){
@@ -2018,6 +2156,48 @@ const ACT = {
   }, 'Добавить'),
   'rm-banned': (b) => { S.ai.banned.splice(+b.dataset.i, 1); save(); pushAI(); const n = $('#banned'); if(n) n.innerHTML = bannedChips(); renderPreview(); haptic('sel'); },
   'preview-refresh': () => { previewQ++; renderPreview(); haptic('light'); },
+
+  /* --- тренировка стиля --- */
+  'style-train': () => { train = { scenarios: train && train.scenarios, log: [] }; go('styletrain'); },
+
+  'train-start': async (b) => {
+    const sc = (train.scenarios || []).find(x => x.id === b.dataset.sc);
+    if(!sc) return;
+    train.scenario = sc; train.log = [];
+    haptic('sel');
+    paint('styletrain', false);
+    await trainNext();
+  },
+
+  'train-send': () => trainSend(),
+
+  'style-analyze': async () => {
+    const replies = train.log.filter(m => m.r === 'owner').map(m => m.t);
+    if(replies.length < 3){ toast('Ответьте хотя бы три раза'); return; }
+    sheet(`<div class="col g12" style="align-items:center;padding:20px 0">
+        <div class="spin" style="border-color:rgba(242,103,34,.25);border-top-color:var(--accent);width:26px;height:26px"></div>
+        <div class="cap">Разбираю вашу манеру…</div></div>`);
+    try {
+      const r = await NET.req('/api/style/analyze', { replies });
+      train.profile = r.profile;
+      showProfile(r.profile);
+    } catch(e){ closeSheet(); netErr(e); }
+  },
+
+  'style-apply': async () => {
+    try { const r = await NET.req('/api/style/apply', {}); S.ai = Object.assign({}, seed().ai, r.ai); }
+    catch(e){ return netErr(e); }
+    closeSheet(); haptic('ok'); train = null;
+    stack = []; paint('aiset', false);
+    toast('Готово — бот теперь пишет в вашей манере');
+  },
+
+  'style-forget': async () => {
+    try { const r = await NET.req('/api/style/forget', {}); S.ai = Object.assign({}, seed().ai, r.ai); }
+    catch(e){ return netErr(e); }
+    save(); haptic('warn'); paint('aiset', false);
+    toast('Голос убран, остались обычные настройки');
+  },
   'save-ai': async () => {
     if(NET.on){ try { await NET.req('/api/ai', { patch: S.ai }); } catch(e){ return netErr(e); } }
     save(); haptic('ok'); toast('Настройки применены — AI отвечает по-новому');

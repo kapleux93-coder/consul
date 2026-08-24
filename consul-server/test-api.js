@@ -38,6 +38,29 @@ groq.model = async () => 'test-model';
 groq.chat = async ({ system, messages }) => {
   lastSystem = system;
   const q = (messages[messages.length - 1] || {}).content || '';
+
+  // Тренировка стиля: модель играет покупателя.
+  if (/Ты играешь ПОКУПАТЕЛЯ/.test(system)) {
+    const turns = messages.filter(m => m.role === 'assistant').length;
+    return {
+      text: JSON.stringify({ message: ['Добрый день, скидка есть?', 'А если две штуки?', 'Ладно, спасибо'][Math.min(turns, 2)], done: turns >= 2 }),
+      usage: { prompt_tokens: 80, completion_tokens: 10 }, model: 'test-model',
+    };
+  }
+  // Разбор манеры письма владельца.
+  if (/разбираешь манеру письма продавца/.test(system)) {
+    return {
+      text: JSON.stringify({
+        summary: 'Пишет коротко и по делу, на «вы».',
+        style: 'neutral', lengthVal: 20,
+        traits: ['короткие ответы', 'обращается на «вы»', 'без смайлов'],
+        instructions: 'Отвечай в одно-два предложения, на «вы», без смайлов и лишних вступлений.',
+        examples: ['Скидка 5% от трёх штук'],
+      }),
+      usage: { prompt_tokens: 120, completion_tokens: 60 }, model: 'test-model',
+    };
+  }
+
   const wantsHuman = /менеджер|счёт|инн|юрлиц/i.test(q);
   const body = wantsHuman
     ? { reply: 'Подключаю менеджера.', handoff: true, reason: 'запрос счёта', stage: 'interested', interest: 'счёт на юрлицо', summary: 'Просит счёт на организацию.', contact: '' }
@@ -47,6 +70,7 @@ groq.chat = async ({ system, messages }) => {
 
 const { server, handleIncoming, htmlToText } = require('./server');
 const store = require('./store');
+const ai = require('./ai');
 
 /* ---- подписанный initData владельца ---- */
 const OWNER = { id: 4242, first_name: 'Анна', last_name: 'Ковалёва', username: 'anna_k' };
@@ -399,6 +423,55 @@ function makeDocx(text) {
     assert.strictEqual(typeof r.json.diag.ready, 'boolean');
     assert.ok(Array.isArray(r.json.diag.warnings));
     assert.strictEqual(r.json.diag.quotaLimit, 300);
+  });
+
+  await t('тренировка стиля: AI играет клиента, а не продавца', async () => {
+    const r = await api('/api/style/next', { history: [], scenario: 'haggle' });
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.json.message.length > 3, 'клиент что-то написал');
+    // модель получила роль покупателя, а не менеджера
+    assert.ok(/ПОКУПАТЕЛЯ/.test(lastSystem), 'в промпте роль покупателя');
+    assert.ok(!/ФОРМАТ ОТВЕТА[\s\S]*handoff/.test(lastSystem), 'это не промпт менеджера');
+  });
+
+  await t('разбор стиля требует минимум трёх ответов', async () => {
+    const r = await api('/api/style/analyze', { replies: ['Да', 'Нет'] });
+    assert.strictEqual(r.status, 400);
+    assert.ok(/три/.test(r.json.error), r.json.error);
+  });
+
+  await t('разбор возвращает профиль и не применяет его сам', async () => {
+    const replies = ['Здравствуйте! Скидка 5% от трёх штук', 'Дешевле не выйдет, гарантия три года', 'За две дам 7%'];
+    const r = await api('/api/style/analyze', { replies });
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.json.profile.instructions, 'есть инструкция для бота');
+    assert.ok(Array.isArray(r.json.profile.traits));
+    const st = await api('/api/state');
+    assert.ok(!st.json.state.ai.styleProfile, 'до подтверждения профиль не применён');
+  });
+
+  await t('применение профиля меняет настройки и промпт бота', async () => {
+    const before = store.getOrCreate(4242).ai.style;
+    const r = await api('/api/style/apply', {});
+    assert.strictEqual(r.status, 200);
+    const w = store.getOrCreate(4242);
+    assert.ok(w.ai.styleProfile, 'профиль сохранён');
+    assert.ok(!w.ai.styleDraft, 'черновик убран');
+    const prompt = ai.systemPrompt(w, []);
+    assert.ok(/ГОЛОС КОМПАНИИ/.test(prompt), 'голос попал в системный промпт');
+    assert.ok(prompt.includes(w.ai.styleProfile.instructions), 'инструкция дословно в промпте');
+  });
+
+  await t('снятие голоса убирает его и из промпта', async () => {
+    await api('/api/style/forget', {});
+    const w = store.getOrCreate(4242);
+    assert.ok(!w.ai.styleProfile);
+    assert.ok(!/ГОЛОС КОМПАНИИ/.test(ai.systemPrompt(w, [])));
+  });
+
+  await t('применять нечего, если тренировки не было', async () => {
+    const r = await api('/api/style/apply', {});
+    assert.strictEqual(r.status, 400);
   });
 
   await t('проверка достижимости владельца: недоступен, если бот не может писать', async () => {

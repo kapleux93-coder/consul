@@ -78,6 +78,15 @@ function systemPrompt(w, chunks) {
   lines.push('- Отвечай ТОЛЬКО фактами из блока ЗНАНИЯ и из истории диалога. Не выдумывай цены, сроки, наличие, характеристики и адреса.');
   lines.push('- Если фактов не хватает — либо задай один уточняющий вопрос, либо передай диалог человеку.');
   if (ai.instructions) lines.push(`- Указания владельца: ${ai.instructions}`);
+  if (ai.styleProfile && ai.styleProfile.instructions) {
+    lines.push('');
+    lines.push('ГОЛОС КОМПАНИИ — снят с реальной переписки владельца, держись его:');
+    lines.push(ai.styleProfile.instructions);
+    if (ai.styleProfile.examples && ai.styleProfile.examples.length) {
+      lines.push('Так владелец пишет сам (подражай манере, а не содержанию):');
+      ai.styleProfile.examples.slice(0, 4).forEach(e => lines.push('  «' + e + '»'));
+    }
+  }
   lines.push('');
   lines.push('ЧТО ТЕБЕ РАЗРЕШЕНО');
   lines.push(`- Рассказывать о товарах, ценах и наличии: ${ai.canProducts ? 'да' : 'НЕТ — на такие вопросы передавай диалог человеку'}.`);
@@ -203,4 +212,108 @@ async function channelPost(w, topic, kind) {
   return { text: clean((p && p.text) || out.text).slice(0, 2000), model: out.model, usage: out.usage };
 }
 
-module.exports = { reply, channelPost, systemPrompt, retrieve, terms, lengthKey };
+/* ============================================================ тренировка стиля */
+
+/**
+ * Сценарии для симуляции клиента. Разные типы разговора вытаскивают разные
+ * грани манеры: на торге видно жёсткость, на жалобе — терпение,
+ * на простом вопросе — многословность.
+ */
+const SCENARIOS = [
+  { id: 'pick',     title: 'Выбирает товар',   brief: 'ты не определился и просишь помочь выбрать, спрашиваешь про отличия и цену' },
+  { id: 'delivery', title: 'Спрашивает доставку', brief: 'тебя волнуют сроки и стоимость доставки в твой город, ты торопишься' },
+  { id: 'haggle',   title: 'Торгуется',         brief: 'цена кажется высокой, ты просишь скидку и сравниваешь с конкурентами' },
+  { id: 'complain', title: 'Недоволен',         brief: 'заказ пришёл позже обещанного, ты раздражён и хочешь понять, что делать' },
+  { id: 'bulk',     title: 'Оптовый заказ',     brief: 'тебе нужна большая партия для компании, ты спрашиваешь про условия и документы' },
+];
+
+/**
+ * Следующая реплика «клиента». Модель играет покупателя, владелец отвечает
+ * как продавец — по этим ответам потом снимается стиль.
+ */
+async function customerMessage(w, history, scenarioId) {
+  const sc = SCENARIOS.find(x => x.id === scenarioId) || SCENARIOS[0];
+  const chunks = retrieve(w.knowledge, sc.brief, 2, 2500);
+  const sys = [
+    `Ты играешь ПОКУПАТЕЛЯ, который пишет в Telegram компании «${w.biz.name || w.bot.name || 'магазин'}».`,
+    w.biz.about ? 'Чем занимается компания: ' + w.biz.about : '',
+    `Твоя роль: ${sc.brief}.`,
+    '',
+    'КАК ПИСАТЬ',
+    '- Ты обычный человек в мессенджере: коротко, 1–2 предложения, без формальностей.',
+    '- Пиши по-русски, живо, можешь ошибаться и переспрашивать.',
+    '- Задавай по одному вопросу за раз, реагируй на то, что тебе ответили.',
+    '- НЕ играй продавца и не подсказывай ему. Ты клиент, тебе нужно решить свою задачу.',
+    '- Если продавец ответил исчерпывающе — поблагодари и заверши разговор (done = true).',
+    '',
+    chunks.length ? 'Что компания продаёт (для правдоподобных вопросов):\n' + chunks.map(c => c.body.slice(0, 600)).join('\n') : '',
+    'Ответ — один JSON: {"message":"твоя реплика","done":false}',
+  ].filter(Boolean).join('\n');
+
+  const msgs = history.map(m => ({ role: m.r === 'client' ? 'assistant' : 'user', content: m.t }));
+  if (!msgs.length) msgs.push({ role: 'user', content: '(начни разговор первым сообщением)' });
+
+  const out = await groq.chat({ system: sys, messages: msgs, json: true, maxTokens: 200, temperature: 0.9 });
+  const p = groq.extractJson(out.text);
+  return {
+    message: clean((p && p.message) || out.text).slice(0, 400) || 'Здравствуйте! Подскажите, пожалуйста.',
+    done: !!(p && p.done),
+    scenario: sc,
+    usage: out.usage,
+  };
+}
+
+/**
+ * Снимает манеру письма с ответов владельца.
+ * Возвращает профиль, который потом уходит в системный промпт бота.
+ */
+async function analyzeStyle(w, replies) {
+  const sys = [
+    'Ты разбираешь манеру письма продавца, чтобы AI-ассистент отвечал клиентам так же.',
+    'Тебе дают только реплики самого продавца из переписки с клиентом.',
+    '',
+    'Оцени по фактам из текста, не додумывай:',
+    '- длину сообщений (в предложениях);',
+    '- обращение: на «вы» или на «ты»;',
+    '- тон: дружелюбный, нейтральный или формальный;',
+    '- смайлы и восклицательные знаки: есть или нет;',
+    '- здоровается ли, как заканчивает сообщения;',
+    '- характерные слова и обороты, которые повторяются.',
+    '',
+    'Поле instructions — это готовая инструкция для другого AI, во втором лице,',
+    'конкретная и проверяемая. Не пиши общих слов вроде «будь вежлив».',
+    '',
+    'Ответ — один JSON:',
+    '{',
+    '  "summary": "как пишет продавец, 1-2 предложения",',
+    '  "style": "friendly | neutral | formal",',
+    '  "lengthVal": 0-100,',
+    '  "traits": ["3-5 коротких наблюдений"],',
+    '  "instructions": "инструкция для AI, 2-4 предложения",',
+    '  "examples": ["до 3 характерных фраз продавца дословно"]',
+    '}',
+  ].join('\n');
+
+  const user = 'Реплики продавца:\n' + replies.map((t, i) => (i + 1) + '. ' + t).join('\n');
+  const out = await groq.chat({ system: sys, messages: [{ role: 'user', content: user }], json: true, maxTokens: 600, temperature: 0.2 });
+  const p = groq.extractJson(out.text);
+  if (!p || !clean(p.instructions)) throw new Error('не удалось разобрать стиль — попробуйте ещё раз');
+
+  const styles = ['friendly', 'neutral', 'formal'];
+  const lv = Number(p.lengthVal);
+  return {
+    summary: clean(p.summary).slice(0, 300),
+    style: styles.includes(p.style) ? p.style : 'neutral',
+    lengthVal: Number.isFinite(lv) ? Math.max(0, Math.min(100, Math.round(lv))) : 40,
+    traits: (Array.isArray(p.traits) ? p.traits : []).slice(0, 6).map(t => clean(t).slice(0, 80)).filter(Boolean),
+    instructions: clean(p.instructions).slice(0, 900),
+    examples: (Array.isArray(p.examples) ? p.examples : []).slice(0, 3).map(t => clean(t).slice(0, 200)).filter(Boolean),
+    trainedAt: Date.now(),
+    usage: out.usage,
+  };
+}
+
+module.exports = {
+  reply, channelPost, systemPrompt, retrieve, terms, lengthKey,
+  customerMessage, analyzeStyle, SCENARIOS,
+};
