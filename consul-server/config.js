@@ -59,6 +59,13 @@ const cfg = {
   // сервер живёт за туннелем на ноутбуке: после сна вебхуки теряются навсегда,
   // а опрос восстанавливается сам.
   forcePolling: process.env.FORCE_POLLING === '1',
+  // Адрес, на котором слушаем. Без проверки подписи Telegram пускаем только
+  // с этой же машины: иначе панель со всеми диалогами открыл бы любой,
+  // кто оказался с вами в одной сети.
+  get host() {
+    if (process.env.HOST) return process.env.HOST;
+    return this.allowInsecureAuth ? '127.0.0.1' : '0.0.0.0';
+  },
   adminIds: String(process.env.ADMIN_IDS || '').split(',').map(s => Number(s.trim())).filter(Boolean),
 
   /* Лимиты — защита вашего ключа Groq от одного слишком активного кабинета. */
@@ -114,6 +121,7 @@ function report() {
   line((cfg.botToken ? '✓' : '✗') + ' Бот Consul: ' + (cfg.botToken ? '@' + (cfg.botUsername || 'токен задан') : 'токена нет'));
   line((cfg.publicUrl ? '✓' : '·') + ' Адрес: ' + (cfg.publicUrl || 'не задан') +
     ' · приём сообщений: ' + (cfg.publicUrl && !cfg.forcePolling ? 'вебхук' : 'опрос'));
+  if (cfg.host === '127.0.0.1') line('· Панель доступна только с этого компьютера');
   line('· Лимиты: ' + cfg.limits.dailyPerWorkspace + ' ответов AI в сутки на кабинет, ' + cfg.limits.dailyGlobal + ' на сервис');
   r.warnings.forEach(w => console.warn('  ! ' + w));
   r.blocking.forEach(b => console.error('  ✗ ' + b));

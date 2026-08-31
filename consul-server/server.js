@@ -1101,8 +1101,9 @@ async function boot() {
 
   backup.schedule(store._file);
 
-  server.listen(PORT, () => {
-    console.log(`[consul] слушаю :${PORT} · режим: ${PUBLIC_URL ? 'вебхук ' + PUBLIC_URL : 'long polling'} · подключённых ботов: ${connected.length}`);
+  server.listen(PORT, cfg.host, () => {
+    const where = cfg.host === '127.0.0.1' ? 'http://localhost:' + PORT + ' (только с этого компьютера)' : ':' + PORT;
+    console.log(`[consul] слушаю ${where} · режим: ${USE_WEBHOOK ? 'вебхук ' + PUBLIC_URL : 'long polling'} · подключённых ботов: ${connected.length}`);
   });
 }
 
