@@ -101,6 +101,19 @@ function check() {
   else if (!/^https:\/\//.test(cfg.publicUrl)) blocking.push('PUBLIC_URL должен начинаться с https:// — Telegram не примет вебхук по http');
   if (cfg.botToken && !cfg.botUsername) warnings.push('BOT_USERNAME не задан — не сможем выдавать ссылки-приглашения менеджерам');
   if (!process.env.CONSUL_ENC_KEY) warnings.push('CONSUL_ENC_KEY не задан — ключ шифрования хранится в data/.enc-key рядом с базой');
+
+  // На хостинге без диска и без внешней базы данные живут до перезапуска.
+  // Молчать об этом нельзя: владельцы потеряют подключённых ботов.
+  const onHost = !!(process.env.RENDER || process.env.RAILWAY_PUBLIC_DOMAIN || process.env.FLY_APP_NAME);
+  const hasRedis = !!((process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) &&
+                      (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN));
+  const dataDir = process.env.CONSUL_DATA_DIR || '';
+  const onDisk = /^\/(var\/data|data|mnt|var\/lib)/.test(dataDir);
+  if (onHost && !hasRedis && !onDisk) {
+    blocking.push('Данные негде хранить: нет ни диска, ни Redis. При перезапуске пропадут ' +
+      'подключённые боты, база знаний и диалоги. Заведите бесплатную базу на upstash.com ' +
+      'и задайте UPSTASH_REDIS_REST_URL и UPSTASH_REDIS_REST_TOKEN.');
+  }
   // Это не предупреждение, а дыра: без проверки подписи любой запрос с чужим
   // user.id открывает чужой кабинет. На публичном адресе — только отказ старта.
   if (cfg.allowInsecureAuth && cfg.publicUrl) {
@@ -122,6 +135,9 @@ function report() {
   line((cfg.publicUrl ? '✓' : '·') + ' Адрес: ' + (cfg.publicUrl || 'не задан') +
     ' · приём сообщений: ' + (cfg.publicUrl && !cfg.forcePolling ? 'вебхук' : 'опрос'));
   if (cfg.host === '127.0.0.1') line('· Панель доступна только с этого компьютера');
+  const redisOn = !!((process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) &&
+                     (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN));
+  line('· Хранилище: ' + (redisOn ? 'Upstash Redis' : 'файл ' + (process.env.CONSUL_DATA_DIR || 'data/')));
   line('· Лимиты: ' + cfg.limits.dailyPerWorkspace + ' ответов AI в сутки на кабинет, ' + cfg.limits.dailyGlobal + ' на сервис');
   r.warnings.forEach(w => console.warn('  ! ' + w));
   r.blocking.forEach(b => console.error('  ✗ ' + b));

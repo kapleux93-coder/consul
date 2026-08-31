@@ -1,0 +1,55 @@
+# Бесплатный Render. В форме Blueprint укажите Blueprint Path: render-free.yaml
+#
+# Это рабочий вариант, а не заглушка: публичный https-адрес есть, мини-апп
+# открывается из Telegram, клиенты получают ответы. Но держится он на двух
+# вещах, и обе обязательны.
+#
+# 1. ДАННЫЕ ВО ВНЕШНЕЙ БАЗЕ. Free-план не даёт диска, файловая система
+#    стирается при каждом перезапуске. Поэтому база лежит в Upstash Redis:
+#    256 МБ и 500 тысяч команд в месяц бесплатно, карта не нужна.
+#    Заведите базу на upstash.com → Create Database → скопируйте из вкладки
+#    REST API значения UPSTASH_REDIS_REST_URL и UPSTASH_REDIS_REST_TOKEN.
+#    Без них сервер откажется стартовать — молча терять чужих ботов нельзя.
+#
+# 2. ПИНГЕР ПРОТИВ ЗАСЫПАНИЯ. Free-инстанс засыпает через 15 минут тишины,
+#    а спящий сервис не опрашивает Telegram и не отвечает клиентам.
+#    Заведите бесплатную проверку на cron-job.org или uptimerobot.com:
+#    раз в 10 минут дёргать https://ВАШ-АДРЕС.onrender.com/health
+#    В месяце ~730 часов, бесплатных — 750, так что круглосуточной работы
+#    одного сервиса хватает. Но второй сервис в этот лимит уже не влезет.
+#
+# FORCE_POLLING включён намеренно. Если инстанс всё же уснёт, сообщения
+# накопятся в очереди Telegram и разберутся при пробуждении. С вебхуками
+# они бы отправлялись в спящий сервис и терялись.
+services:
+  - type: web
+    name: consul
+    runtime: node
+    plan: free
+    rootDir: consul-server
+    buildCommand: "echo зависимостей нет"
+    startCommand: "node server.js"
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: FORCE_POLLING
+        value: "1"
+      # Ключи Groq и бота — впишите при создании Blueprint
+      - key: GROQ_API_KEY
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      # Внешняя база вместо диска: upstash.com → REST API
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      # Ключ шифрования токенов ботов. Render хранит его в переменных
+      # окружения, поэтому он переживает перезапуски без диска.
+      - key: CONSUL_ENC_KEY
+        generateValue: true
+      - key: ADMIN_IDS
+        sync: false

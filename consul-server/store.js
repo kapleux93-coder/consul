@@ -2,10 +2,17 @@
 /* ============================================================================
  * Хранилище Consul. Один рабочий кабинет (workspace) на владельца бота.
  *
- * Бэкенд — JSON-файл рядом с сервером (data/store.json), атомарная запись через
- * временный файл + rename. Зависимостей нет. Для продакшена с несколькими
- * инстансами это надо заменить на БД — интерфейс тут намеренно узкий
- * (get/save/find), чтобы такая замена была локальной.
+ * Два бэкенда, выбирается сам:
+ *   • Upstash Redis (REST) — когда заданы UPSTASH_REDIS_REST_URL и TOKEN.
+ *     Нужен там, где нет постоянного диска: на бесплатном Render файловая
+ *     система стирается при каждом перезапуске, и без внешнего хранилища
+ *     владельцы теряли бы подключённых ботов.
+ *   • JSON-файл рядом с сервером — локально и на VPS с диском.
+ *
+ * Приём один и тот же в обоих случаях: вся база держится в памяти, читается
+ * один раз при старте, пишется целиком отложенно. Поэтому вызовы остаются
+ * синхронными, а в Redis уходит несколько команд в минуту, а не на каждый чих —
+ * это важно, чтобы влезть в бесплатные 500 тысяч команд в месяц.
  * ========================================================================== */
 
 const fs = require('fs');
@@ -15,23 +22,89 @@ const crypto = require('crypto');
 const DATA_DIR = process.env.CONSUL_DATA_DIR || path.join(__dirname, 'data');
 const FILE = path.join(DATA_DIR, 'store.json');
 
+const REDIS_URL = (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '').replace(/\/+$/, '');
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '';
+const REDIS_KEY = process.env.CONSUL_REDIS_KEY || 'consul:store';
+const useRedis = !!(REDIS_URL && REDIS_TOKEN);
+
 let db = null;
 let saveTimer = null;
+let writing = false;      // идёт запись в Redis
+let dirtyAgain = false;   // за время записи данные снова изменились
 
 function empty() { return { workspaces: {}, byBotId: {}, byWebhookSecret: {}, seq: 1 }; }
 
+function normalize(obj) {
+  const d = obj && typeof obj === 'object' ? obj : empty();
+  for (const k of Object.keys(empty())) if (d[k] == null) d[k] = empty()[k];
+  return d;
+}
+
 function load() {
   if (db) return db;
-  try {
-    db = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-  } catch (e) {
+  if (useRedis) {
+    // База должна быть загружена через initRemote() до первого обращения.
+    // Если этого не произошло — начинаем с пустой, но громко жалуемся,
+    // чтобы не затереть чужие данные молча.
+    console.error('[store] обращение к Redis-хранилищу до initRemote() — начинаю с пустого');
     db = empty();
+    return db;
   }
-  for (const k of Object.keys(empty())) if (db[k] == null) db[k] = empty()[k];
+  try { db = normalize(JSON.parse(fs.readFileSync(FILE, 'utf8'))); }
+  catch (e) { db = empty(); }
   return db;
 }
 
-function flush() {
+/* ------------------------------------------------------------ redis (REST) */
+
+async function redis(command) {
+  const res = await fetch(REDIS_URL, {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + REDIS_TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify(command),
+    signal: AbortSignal.timeout(Number(process.env.REDIS_TIMEOUT_MS) || 10000),
+  });
+  if (!res.ok) throw new Error('redis ' + res.status + ' ' + (await res.text()).slice(0, 200));
+  const data = await res.json();
+  if (data.error) throw new Error('redis: ' + data.error);
+  return data.result;
+}
+
+/**
+ * Читает базу из Redis в память. Вызывается один раз при старте до того,
+ * как сервер начнёт принимать запросы.
+ * @returns {Promise<{ok:boolean, workspaces:number, error?:string}>}
+ */
+async function initRemote() {
+  if (!useRedis) return { ok: true, workspaces: Object.keys(load().workspaces).length, backend: 'file' };
+  try {
+    const raw = await redis(['GET', REDIS_KEY]);
+    db = normalize(raw ? JSON.parse(raw) : null);
+    return { ok: true, workspaces: Object.keys(db.workspaces).length, backend: 'redis' };
+  } catch (e) {
+    // Пустую базу поверх существующей не пишем: лучше упасть, чем потерять
+    // чужие кабинеты из-за сетевого сбоя при старте.
+    db = null;
+    return { ok: false, error: e.message, backend: 'redis' };
+  }
+}
+
+async function flushRedis() {
+  if (!db) return;
+  if (writing) { dirtyAgain = true; return; }
+  writing = true;
+  try {
+    await redis(['SET', REDIS_KEY, JSON.stringify(db)]);
+  } catch (e) {
+    console.error('[store] запись в Redis не удалась:', e.message);
+    dirtyAgain = true;   // попробуем на следующем сохранении
+  } finally {
+    writing = false;
+    if (dirtyAgain) { dirtyAgain = false; setTimeout(flushRedis, 1000).unref?.(); }
+  }
+}
+
+function flushFile() {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     const tmp = FILE + '.' + process.pid + '.tmp';
@@ -42,15 +115,17 @@ function flush() {
   }
 }
 
+function flush() { return useRedis ? flushRedis() : flushFile(); }
+
 /** Отложенная запись — вызывается после каждой мутации. */
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(flush, 200);
+  saveTimer = setTimeout(flush, useRedis ? 700 : 200);
   if (saveTimer.unref) saveTimer.unref();
 }
 
-/** Синхронный сброс на диск (при завершении процесса и в тестах). */
-function persistNow() { clearTimeout(saveTimer); flush(); }
+/** Сброс без ожидания таймера (при завершении процесса и в тестах). */
+function persistNow() { clearTimeout(saveTimer); return flush(); }
 
 /* ------------------------------------------------------------ workspace */
 
@@ -197,7 +272,8 @@ module.exports = {
   get, getOrCreate, save, defaults, remove,
   findByBotId, findByWebhookSecret, bindBot, unbindBot, allConnected, allWorkspaces,
   dialog, upsertDialog, pushMessage,
-  persist, persistNow, genId,
+  persist, persistNow, genId, initRemote,
+  backend: useRedis ? 'redis' : 'file',
   _file: FILE,
   _reset() { db = empty(); persistNow(); },
 };

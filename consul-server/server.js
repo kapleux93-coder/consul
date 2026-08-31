@@ -1058,6 +1058,18 @@ async function boot() {
   const health = cfg.report();
   if (health.fatal.length) process.exit(1);
 
+  /* Хранилище поднимаем до того, как начнём принимать запросы: если база
+     во внешнем Redis и он недоступен, работать нельзя — иначе кабинеты
+     владельцев затрутся пустыми. */
+  const st = await store.initRemote();
+  if (!st.ok) {
+    console.error('\n  ✗ Не удалось прочитать хранилище: ' + st.error);
+    console.error('    Проверьте UPSTASH_REDIS_REST_URL и UPSTASH_REDIS_REST_TOKEN.');
+    console.error('    Запускаться не буду, чтобы не потерять данные.\n');
+    process.exit(1);
+  }
+  console.log('[store] ' + (st.backend === 'redis' ? 'Redis' : 'файл') + ', кабинетов: ' + st.workspaces);
+
   /* Ключ мало «задать» — его надо проверить. Иначе сервис поднимется,
      а каждый диалог будет молча уходить человеку. */
   if (groq.enabled()) {
@@ -1099,7 +1111,9 @@ async function boot() {
     catch (e) { console.warn('[tg] вебхук платформенного бота: ' + e.message); }
   }
 
-  backup.schedule(store._file);
+  // Копии на диск имеют смысл только когда там же лежит и сама база.
+  if (store.backend === 'file') backup.schedule(store._file);
+  else console.log('[backup] база во внешнем Redis — локальные копии не делаю');
 
   server.listen(PORT, cfg.host, () => {
     const where = cfg.host === '127.0.0.1' ? 'http://localhost:' + PORT + ' (только с этого компьютера)' : ':' + PORT;
