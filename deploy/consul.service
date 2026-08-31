@@ -1,0 +1,34 @@
+# systemd-юнит для VPS. Ставится скриптом deploy/install.sh в /etc/systemd/system/
+[Unit]
+Description=Consul — AI-менеджер для Telegram-бота
+Documentation=https://github.com/matveykapljr11-alt/consul
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=consul
+Group=consul
+WorkingDirectory=/opt/consul/consul-server
+EnvironmentFile=/opt/consul/consul-server/.env
+ExecStart=/usr/bin/node /opt/consul/consul-server/server.js
+Restart=always
+RestartSec=5
+
+# Данные пишутся только в свой каталог, остальная система для сервиса
+# доступна только на чтение.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/consul
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=consul
+
+[Install]
+WantedBy=multi-user.target

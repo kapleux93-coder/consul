@@ -55,6 +55,10 @@ const cfg = {
   botUsername: (process.env.BOT_USERNAME || '').trim().replace('@', ''),
   groqKey: (process.env.GROQ_API_KEY || '').trim(),
   allowInsecureAuth: process.env.ALLOW_INSECURE_AUTH === '1',
+  // Публичный адрес есть, но сообщения всё равно забираем опросом. Нужно, когда
+  // сервер живёт за туннелем на ноутбуке: после сна вебхуки теряются навсегда,
+  // а опрос восстанавливается сам.
+  forcePolling: process.env.FORCE_POLLING === '1',
   adminIds: String(process.env.ADMIN_IDS || '').split(',').map(s => Number(s.trim())).filter(Boolean),
 
   /* Лимиты — защита вашего ключа Groq от одного слишком активного кабинета. */
@@ -86,6 +90,7 @@ function check() {
   }
   if (!cfg.groqKey) blocking.push('GROQ_API_KEY не задан: бот не сможет отвечать, все диалоги уйдут менеджеру');
   if (!cfg.publicUrl) warnings.push('PUBLIC_URL не задан — приём сообщений через long polling. Для продакшена укажите публичный https-адрес');
+  else if (cfg.forcePolling) warnings.push('FORCE_POLLING=1 — адрес есть, но сообщения забираем опросом (режим для туннеля)');
   else if (!/^https:\/\//.test(cfg.publicUrl)) blocking.push('PUBLIC_URL должен начинаться с https:// — Telegram не примет вебхук по http');
   if (cfg.botToken && !cfg.botUsername) warnings.push('BOT_USERNAME не задан — не сможем выдавать ссылки-приглашения менеджерам');
   if (!process.env.CONSUL_ENC_KEY) warnings.push('CONSUL_ENC_KEY не задан — ключ шифрования хранится в data/.enc-key рядом с базой');
@@ -107,7 +112,8 @@ function report() {
   if (envLoaded) line('· .env: подхвачено переменных — ' + envLoaded);
   line((cfg.groqKey ? '✓' : '✗') + ' Groq: ' + (cfg.groqKey ? 'ключ задан' : 'ключа нет'));
   line((cfg.botToken ? '✓' : '✗') + ' Бот Consul: ' + (cfg.botToken ? '@' + (cfg.botUsername || 'токен задан') : 'токена нет'));
-  line((cfg.publicUrl ? '✓' : '·') + ' Адрес: ' + (cfg.publicUrl || 'не задан, режим long polling'));
+  line((cfg.publicUrl ? '✓' : '·') + ' Адрес: ' + (cfg.publicUrl || 'не задан') +
+    ' · приём сообщений: ' + (cfg.publicUrl && !cfg.forcePolling ? 'вебхук' : 'опрос'));
   line('· Лимиты: ' + cfg.limits.dailyPerWorkspace + ' ответов AI в сутки на кабинет, ' + cfg.limits.dailyGlobal + ' на сервис');
   r.warnings.forEach(w => console.warn('  ! ' + w));
   r.blocking.forEach(b => console.error('  ✗ ' + b));

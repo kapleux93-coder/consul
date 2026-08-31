@@ -1,0 +1,18 @@
+# Caddy сам получит и продлит сертификат Let's Encrypt для этого домена.
+# __DOMAIN__ подставляет deploy/install.sh
+__DOMAIN__ {
+	encode zstd gzip
+
+	# SSE не должен буферизоваться, иначе новые сообщения придут пачкой в конце
+	@sse path /api/stream
+	reverse_proxy @sse 127.0.0.1:8080 {
+		flush_interval -1
+	}
+
+	reverse_proxy 127.0.0.1:8080
+
+	log {
+		output file /var/log/caddy/consul.log
+		format console
+	}
+}

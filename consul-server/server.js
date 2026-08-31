@@ -45,6 +45,8 @@ const ALLOW_INSECURE_AUTH = cfg.allowInsecureAuth;
 const HTML_FILE = process.env.CONSUL_HTML || path.join(__dirname, '..', 'consul.html');
 const MAX_BODY = 512 * 1024;
 const MAX_UPLOAD = 8 * 1024 * 1024;
+/** Ставить ли вебхук. Адрес может быть, но приём всё равно опросом (туннель). */
+const USE_WEBHOOK = !!PUBLIC_URL && !cfg.forcePolling;
 
 /* ============================================================ утилиты */
 
@@ -165,7 +167,7 @@ function publicState(w) {
     counters: w.counters,
     usage: w.usage,
     ai_ready: groq.enabled(),
-    mode: PUBLIC_URL ? 'webhook' : 'polling',
+    mode: USE_WEBHOOK ? 'webhook' : 'polling',
     notifyOk: w.notifyOk !== false,
     quota: {
       usedToday: limits.usedToday(w),
@@ -458,7 +460,7 @@ const routes = {
     store.save(w);
 
     let mode = 'polling', warn = '';
-    if (PUBLIC_URL) {
+    if (USE_WEBHOOK) {
       try { await tg.setWebhook(token, `${PUBLIC_URL}/tg/${webhookSecret}`, webhookSecret); mode = 'webhook'; }
       catch (e) { warn = 'Вебхук не установился: ' + e.message + '. Включаю опрос.'; tg.startPolling(token, me.id, updateHandlerFor(w)); }
     } else {
@@ -871,7 +873,7 @@ const routes = {
     const out = {
       groq: groq.enabled(), model: null,
       botToken: !!BOT_TOKEN, publicUrl: PUBLIC_URL || null,
-      mode: PUBLIC_URL ? 'webhook' : 'polling',
+      mode: USE_WEBHOOK ? 'webhook' : 'polling',
       knowledge: w.knowledge.length, dialogs: Object.keys(w.dialogs).length,
       usage: w.usage,
       quotaToday: limits.usedToday(w), quotaLimit: cfg.limits.dailyPerWorkspace,
@@ -947,7 +949,7 @@ function serveHtml(res) {
       const cfg = `<script>window.CONSUL_CONFIG=${JSON.stringify({
         api: PUBLIC_URL || '',
         bot: BOT_USERNAME,
-        mode: PUBLIC_URL ? 'webhook' : 'polling',
+        mode: USE_WEBHOOK ? 'webhook' : 'polling',
         // Только для локальной разработки: позволяет открыть мини-апп в обычном
         // браузере, без Telegram. В проде ALLOW_INSECURE_AUTH не выставляют.
         devInitData: ALLOW_INSECURE_AUTH && !BOT_TOKEN ? devInitData() : undefined,
@@ -994,7 +996,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/health') {
-    return ok(res, { ok: true, uptime: Math.round(process.uptime()), groq: groq.enabled(), mode: PUBLIC_URL ? 'webhook' : 'polling', bots: tg.pollers.size });
+    return ok(res, { ok: true, uptime: Math.round(process.uptime()), groq: groq.enabled(), mode: USE_WEBHOOK ? 'webhook' : 'polling', bots: tg.pollers.size });
   }
 
   /* --- SSE --- */
@@ -1078,7 +1080,7 @@ async function boot() {
   for (const w of connected) {
     const token = secret.decrypt(w.bot.tokenEnc);
     if (!token) continue;
-    if (PUBLIC_URL) {
+    if (USE_WEBHOOK) {
       try { await tg.setWebhook(token, `${PUBLIC_URL}/tg/${w.bot.webhookSecret}`, w.bot.webhookSecret); }
       catch (e) {
         console.warn('[tg] вебхук для @' + w.bot.username + ': ' + e.message);
@@ -1089,10 +1091,10 @@ async function boot() {
       tg.startPolling(token, w.bot.botId, updateHandlerFor(w));
     }
   }
-  if (BOT_TOKEN && !PUBLIC_URL) {
+  if (BOT_TOKEN && !USE_WEBHOOK) {
     await tg.deleteWebhook(BOT_TOKEN);
     tg.startPolling(BOT_TOKEN, 'platform', handlePlatformUpdate);
-  } else if (BOT_TOKEN && PUBLIC_URL && process.env.PLATFORM_WEBHOOK_SECRET) {
+  } else if (BOT_TOKEN && USE_WEBHOOK && process.env.PLATFORM_WEBHOOK_SECRET) {
     try { await tg.setWebhook(BOT_TOKEN, `${PUBLIC_URL}/tg-platform/${process.env.PLATFORM_WEBHOOK_SECRET}`, process.env.PLATFORM_WEBHOOK_SECRET); }
     catch (e) { console.warn('[tg] вебхук платформенного бота: ' + e.message); }
   }

@@ -12,7 +12,7 @@
  * ========================================================================== */
 
 const http = require('http');
-const PORT = Number(process.argv[2]) || 8099;
+const PORT = Number(process.argv[2]) || Number(process.env.MOCK_GROQ_PORT) || 8099;
 const MODEL = 'mock-groq-rules';
 
 /** Достаёт факты из блока ЗНАНИЯ системного промпта. */
@@ -125,7 +125,7 @@ function styleProfile(text) {
   };
 }
 
-http.createServer((req, res) => {
+const srv = http.createServer((req, res) => {
   let raw = '';
   req.on('data', c => raw += c);
   req.on('end', () => {
@@ -160,4 +160,18 @@ http.createServer((req, res) => {
       }));
     }, 250 + Math.random() * 350);
   });
-}).listen(PORT, () => console.log('[mock-groq] http://127.0.0.1:' + PORT + '/v1 — заглушка модели, только для разработки'));
+});
+
+srv.on('error', e => {
+  if (e.code === 'EADDRINUSE') {
+    // Порт занят: скорее всего, заглушка уже поднята прошлым запуском.
+    // Для разработки это не ошибка — просто пользуемся тем, что работает.
+    console.log('[mock-groq] порт ' + PORT + ' уже занят — использую запущенную заглушку');
+    return;
+  }
+  console.error('[mock-groq] ' + e.message);
+});
+
+srv.listen(PORT, () => console.log('[mock-groq] http://127.0.0.1:' + PORT + '/v1 — заглушка модели, только для разработки'));
+
+module.exports = srv;

@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "ALLOW_INSECURE_AUTH=1 node server.js",
+    "dev": "node dev.js",
     "test": "node test-store.js && node test-auth.js && node test-groq.js && node test-extract.js && node test-limits.js && node test-backup.js && node test-ai.js && node test-api.js",
     "models": "node groq.js --list",
     "setup": "node setup.js"
