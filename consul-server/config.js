@@ -97,10 +97,25 @@ function check() {
   }
   if (!cfg.groqKey) blocking.push('GROQ_API_KEY не задан: бот не сможет отвечать, все диалоги уйдут менеджеру');
   if (!cfg.publicUrl) warnings.push('PUBLIC_URL не задан — приём сообщений через long polling. Для продакшена укажите публичный https-адрес');
-  else if (cfg.forcePolling) warnings.push('FORCE_POLLING=1 — адрес есть, но сообщения забираем опросом (режим для туннеля)');
+  else if (cfg.forcePolling) warnings.push('FORCE_POLLING=1 — адрес есть, но сообщения забираем опросом. Так надёжнее там, где сервис может уснуть: сообщения подождут в очереди Telegram');
   else if (!/^https:\/\//.test(cfg.publicUrl)) blocking.push('PUBLIC_URL должен начинаться с https:// — Telegram не примет вебхук по http');
   if (cfg.botToken && !cfg.botUsername) warnings.push('BOT_USERNAME не задан — не сможем выдавать ссылки-приглашения менеджерам');
-  if (!process.env.CONSUL_ENC_KEY) warnings.push('CONSUL_ENC_KEY не задан — ключ шифрования хранится в data/.enc-key рядом с базой');
+  const hasRedisKv = !!((process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) &&
+                        (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN));
+  if (!process.env.CONSUL_ENC_KEY) {
+    const dir = process.env.CONSUL_DATA_DIR || '';
+    const keyOnDisk = /^\/(var\/data|data|mnt|var\/lib)/.test(dir);
+    if (hasRedisKv && !keyOnDisk) {
+      // База во внешнем Redis, а ключ — во временной файловой системе. При
+      // перезапуске ключ создастся заново, и токены ботов в Redis станет
+      // нечем расшифровать: боты замолчат, и никто не поймёт почему.
+      blocking.push('CONSUL_ENC_KEY не задан, а диска нет: после перезапуска токены ботов в Redis ' +
+        'станет нечем расшифровать и боты замолчат. Сгенерируйте ключ (openssl rand -hex 32) ' +
+        'и задайте его в переменных окружения.');
+    } else {
+      warnings.push('CONSUL_ENC_KEY не задан — ключ шифрования хранится в data/.enc-key рядом с базой');
+    }
+  }
 
   // На хостинге без диска и без внешней базы данные живут до перезапуска.
   // Молчать об этом нельзя: владельцы потеряют подключённых ботов.
