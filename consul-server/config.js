@@ -50,7 +50,10 @@ function detectPublicUrl() {
 
 const cfg = {
   port: num(process.env.PORT, 8080),
-  publicUrl: detectPublicUrl(),
+  // Читаем при обращении: адрес хостинга подставляется в окружение до старта,
+  // но в тестах его меняют на лету, а зафиксированное на загрузке значение
+  // молча остаётся старым.
+  get publicUrl() { return detectPublicUrl(); },
   botToken: (process.env.BOT_TOKEN || '').trim(),
   botUsername: (process.env.BOT_USERNAME || '').trim().replace('@', ''),
   groqKey: (process.env.GROQ_API_KEY || '').trim(),
@@ -86,10 +89,18 @@ const cfg = {
     maxWorkspaces: num(process.env.LIMIT_WORKSPACES, 0),       // 0 = без ограничения
   },
 
-  urls: {
-    privacy: (process.env.PRIVACY_URL || '').trim(),
-    terms: (process.env.TERMS_URL || '').trim(),
-    support: (process.env.SUPPORT_URL || '').trim(),
+  /* Политику и условия сервер отдаёт сам на /privacy и /terms. Ссылку на них
+   * показываем только когда указан оператор: документ, из которого непонятно,
+   * кто отвечает за сервис и куда писать, хуже, чем его отсутствие.
+   * PRIVACY_URL и TERMS_URL перекрывают встроенные страницы, если у вас свои. */
+  get urls() {
+    const own = require('./legal').ready();   // оператор указан — документ имеет силу
+    const base = this.publicUrl || '';
+    return {
+      privacy: (process.env.PRIVACY_URL || '').trim() || (own && base ? base + '/privacy' : ''),
+      terms: (process.env.TERMS_URL || '').trim() || (own && base ? base + '/terms' : ''),
+      support: (process.env.SUPPORT_URL || '').trim(),
+    };
   },
 };
 
@@ -137,6 +148,14 @@ function check() {
       'подключённые боты, база знаний и диалоги. Заведите бесплатную базу на upstash.com ' +
       'и задайте UPSTASH_REDIS_REST_URL и UPSTASH_REDIS_REST_TOKEN.');
   }
+  // Люди отдают сервису токены своих ботов и переписку своих клиентов. Пока не
+  // сказано, кто за это отвечает и куда писать, показывать им политику не на что.
+  if (!cfg.urls.privacy) {
+    warnings.push('OPERATOR_NAME и OPERATOR_EMAIL не заданы — политика данных и условия ' +
+      'открываются на /privacy и /terms, но ссылки на них в приложении скрыты: ' +
+      'в документе не указано, кто отвечает за сервис');
+  }
+
   // Это не предупреждение, а дыра: без проверки подписи любой запрос с чужим
   // user.id открывает чужой кабинет. На публичном адресе — только отказ старта.
   if (cfg.allowInsecureAuth && cfg.publicUrl) {

@@ -38,6 +38,7 @@ const extract = require('./extract');
 const backup = require('./backup');
 const human = require('./human');
 const followup = require('./followup');
+const legal = require('./legal');
 
 const PORT = cfg.port;
 const BOT_TOKEN = cfg.botToken;                 // платформенный бот Consul
@@ -1255,6 +1256,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && (pathname === '/' || pathname === '/consul.html' || pathname === '/index.html')) return serveHtml(res);
+
+  /* --- политика данных и условия: на том же домене, что и мини-апп --- */
+  if (req.method === 'GET' && (pathname === '/privacy' || pathname === '/terms')) {
+    const html = pathname === '/privacy' ? legal.privacy() : legal.terms();
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=600' });
+    return res.end(html);
+  }
 
   res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
   res.end('404');

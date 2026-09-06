@@ -565,6 +565,47 @@ function makeDocx(text) {
     assert.strictEqual(r.json.state.bot.connected, false);
   });
 
+  console.log('api / политика данных');
+
+  await t('политика и условия открываются на том же домене', async () => {
+    for (const p of ['/privacy', '/terms']) {
+      const res = await fetch(base + p);
+      assert.strictEqual(res.status, 200, p + ' должен открываться');
+      const html = await res.text();
+      assert.ok(/text\/html/.test(res.headers.get('content-type') || ''), p + ' отдаётся как страница');
+      assert.ok(html.length > 1500, p + ' не должен быть заглушкой');
+    }
+  });
+
+  await t('без оператора ссылку на политику приложению не отдаём', async () => {
+    delete process.env.OPERATOR_NAME; delete process.env.OPERATOR_EMAIL;
+    const r = await api('/api/state');
+    assert.strictEqual(r.json.state.links.privacy, '', 'документ без ответственного лица не показываем');
+  });
+
+  await t('с оператором ссылки появляются и ведут на встроенные страницы', async () => {
+    process.env.OPERATOR_NAME = 'ИП Тестов';
+    process.env.OPERATOR_EMAIL = 'test@example.com';
+    process.env.PUBLIC_URL = 'https://consul.example.com';
+    try {
+      const links = require('./config').urls;
+      assert.strictEqual(links.privacy, 'https://consul.example.com/privacy');
+      assert.strictEqual(links.terms, 'https://consul.example.com/terms');
+      const html = require('./legal').privacy();
+      assert.ok(html.includes('test@example.com'), 'в тексте есть адрес для связи');
+      assert.ok(!/Оператор не указан/.test(html), 'заглушки про оператора больше нет');
+    } finally {
+      delete process.env.OPERATOR_NAME; delete process.env.OPERATOR_EMAIL;
+      delete process.env.PUBLIC_URL;
+    }
+  });
+
+  await t('своя страница перекрывает встроенную', async () => {
+    process.env.PRIVACY_URL = 'https://example.com/policy';
+    try { assert.strictEqual(require('./config').urls.privacy, 'https://example.com/policy'); }
+    finally { delete process.env.PRIVACY_URL; }
+  });
+
   await t('отключение бота снимает привязку', async () => {
     const r = await api('/api/bot/disconnect');
     assert.strictEqual(r.status, 200);
