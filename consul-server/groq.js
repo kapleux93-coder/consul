@@ -13,9 +13,15 @@
  * Зависимостей нет — глобальный fetch (Node 18+).
  * ========================================================================== */
 
-const API = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
-const KEY = process.env.GROQ_API_KEY || '';
-const TIMEOUT = Number(process.env.GROQ_TIMEOUT_MS) || 20000;
+/* config.js читает .env. Требуем его здесь не ради значений, а ради порядка:
+ * если этот модуль загрузится раньше, ключ из .env ещё не будет в окружении,
+ * enabled() навсегда вернёт false — и сервер молча начнёт передавать каждый
+ * диалог человеку, как будто ключа нет. */
+require('./config');
+
+const API = () => process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+const KEY = () => (process.env.GROQ_API_KEY || '').trim();
+const TIMEOUT = () => Number(process.env.GROQ_TIMEOUT_MS) || 20000;
 
 /* Порядок предпочтения: сначала то, что лучше держит инструкции и JSON. */
 const PREFERRED = [
@@ -30,17 +36,17 @@ const PREFERRED = [
 let resolved = null;      // выбранная модель
 let resolving = null;     // промис выбора, чтобы не гонять запрос параллельно
 
-const enabled = () => !!KEY;
+const enabled = () => !!KEY();
 
 async function request(pathname, init, tries = 3) {
   let lastErr = null;
   for (let i = 0; i < tries; i++) {
     try {
-      const res = await fetch(API + pathname, Object.assign({
-        signal: AbortSignal.timeout(TIMEOUT),
+      const res = await fetch(API() + pathname, Object.assign({
+        signal: AbortSignal.timeout(TIMEOUT()),
       }, init, {
         headers: Object.assign({
-          authorization: 'Bearer ' + KEY,
+          authorization: 'Bearer ' + KEY(),
           'content-type': 'application/json',
         }, (init && init.headers) || {}),
       }));

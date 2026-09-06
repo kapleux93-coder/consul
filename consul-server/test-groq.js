@@ -121,6 +121,21 @@ const stub = http.createServer((req, res) => {
     assert.strictEqual(g.extractJson('{сломано}'), null);
   });
 
+  await t('ключ читается при вызове, а не при загрузке модуля', () => {
+    // Раньше KEY фиксировался константой на загрузке. Любой файл, который
+    // подключал groq.js раньше config.js, получал enabled() === false навсегда:
+    // сервер молча передавал каждый диалог человеку, как будто ключа нет.
+    const saved = process.env.GROQ_API_KEY;
+    try {
+      delete process.env.GROQ_API_KEY;
+      assert.strictEqual(g.enabled(), false, 'без ключа выключен');
+      process.env.GROQ_API_KEY = 'появился-позже';
+      assert.strictEqual(g.enabled(), true, 'ключ, заданный после загрузки, должен подхватываться');
+    } finally {
+      if (saved === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = saved;
+    }
+  });
+
   stub.close();
   console.log('groq: ' + n + ' тестов пройдено\n');
   process.exit(0);
