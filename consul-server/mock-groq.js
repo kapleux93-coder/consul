@@ -48,8 +48,9 @@ function answer(system, question) {
   // ищем строку факта, пересекающуюся со словами вопроса
   const words = q.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(w => w.length > 4);
   const hit = facts.find(f => words.some(w => f.toLowerCase().includes(w.slice(0, w.length - 1))));
+  // Пустая строка — граница между сообщениями, как её ставит настоящая модель.
   const reply = hit
-    ? hit.slice(0, 220) + (/[.?!]$/.test(hit.slice(0, 220)) ? '' : '.') + ' Показать подробнее?'
+    ? hit.slice(0, 220) + (/[.?!]$/.test(hit.slice(0, 220)) ? '' : '.') + '\n\nПоказать подробнее?'
     : 'Подскажите, что именно ищете — подберу вариант и назову цену.';
   return {
     reply, handoff: false, reason: '',

@@ -17,4 +17,4 @@ npm run setup
 npm start
 ```
 
-Тесты: `cd consul-server && npm test` (128 тестов, без сети).
+Тесты: `cd consul-server && npm test` (147 тестов, без сети).

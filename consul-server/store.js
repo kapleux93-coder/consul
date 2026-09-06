@@ -145,6 +145,7 @@ function defaults(ownerId) {
       instructions: '',
       banned: [],
       paused: false,
+      humanize: true,   // паузы, разбиение на реплики, ответ на очередь разом
     },
     team: [], depts: ['Sales', 'Support'],
     knowledge: [],

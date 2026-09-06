@@ -1582,6 +1582,16 @@ VIEWS.aiset = () => `
           `<div class="between" style="padding:13px 0"><div style="font:500 15px/1 var(--f)">${l}</div>
             <button class="sw ${S.ai[k]?'on':''}" data-act="toggle-ai" data-k="${k}" data-re="1"><i></i></button></div>`).join('')}
       </div></div>
+    <div class="col g9"><div class="lbl">Как отвечает</div>
+      <div class="list" style="padding:4px 14px">
+        <div class="between" style="padding:13px 0">
+          <div class="col g4" style="padding-right:12px">
+            <div style="font:500 15px/1 var(--f)">Вести себя как человек</div>
+            <div class="cap2">Отвечает через пару секунд, а не мгновенно. Длинный ответ шлёт двумя репликами. Если клиент пишет очередью — дочитает и ответит один раз.</div>
+          </div>
+          <button class="sw ${S.ai.humanize !== false ?'on':''}" data-act="toggle-ai" data-k="humanize"><i></i></button>
+        </div>
+      </div></div>
   </div>
   <div class="push" style="background:var(--soft3);border:1px solid var(--line);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px;margin-top:18px">
     <div class="between"><div style="font:600 14px/1 var(--f)">Превью</div>

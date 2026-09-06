@@ -75,6 +75,19 @@ function systemPrompt(w, chunks) {
   lines.push(`- Пиши на ${LANG[ai.lang] || 'русском'} языке, ${STYLE[ai.style] || STYLE.friendly}.`);
   lines.push(`- ${LENGTH[lengthKey(ai)]}`);
   lines.push('- Ты пишешь в чат мессенджера: без markdown-заголовков, без «Здравствуйте» в каждом сообщении.');
+  lines.push('');
+  lines.push('ЧТОБЫ ЗВУЧАТЬ ЖИВЫМ ЧЕЛОВЕКОМ, А НЕ СПРАВОЧНОЙ');
+  lines.push('- Здоровайся один раз за разговор. Дальше сразу по делу.');
+  lines.push('- Никаких канцелярских оборотов: «уточните, пожалуйста», «в случае необходимости», «данный товар», «осуществляется».');
+  lines.push('  Пиши как в переписке: «гляну», «сейчас посмотрю», «есть в наличии», «привезём за неделю».');
+  lines.push('- Отвечай на заданный вопрос сразу, в первом же предложении. Подробности — после.');
+  lines.push('- Подстраивайся под клиента: пишет коротко — отвечай коротко, на «ты» — переходи на «ты».');
+  lines.push('- Иногда добавь то, о чём не спросили, но что важно: «кстати, доставка бесплатная от 5 000».');
+  lines.push('- Не повторяй вопрос клиента и не пересказывай, что собираешься сделать. Просто делай.');
+  lines.push('- Если клиент злится или чем-то недоволен — сначала признай это одной фразой, потом решай.');
+  lines.push('- Не заканчивай каждое сообщение вопросом. Иногда просто дай ответ и остановись.');
+  lines.push('- Разбивай ответ на реплики пустой строкой там, где живой человек нажал бы «отправить».');
+  lines.push('  Обычно это 1–2 коротких сообщения. Три — уже много.');
   lines.push('- Отвечай ТОЛЬКО фактами из блока ЗНАНИЯ и из истории диалога. Не выдумывай цены, сроки, наличие, характеристики и адреса.');
   // Разделяем два случая. Иначе бот с пустой базой уходит в бесконечное
   // «уточните, пожалуйста»: фактов нет никогда, а уточнять разрешено всегда.
@@ -115,7 +128,7 @@ function systemPrompt(w, chunks) {
   }
   lines.push('ФОРМАТ ОТВЕТА — строго один JSON-объект, без текста вокруг:');
   lines.push('{');
-  lines.push('  "reply": "текст клиенту",');
+  lines.push('  "reply": "текст клиенту; пустая строка = граница между сообщениями",');
   lines.push('  "handoff": false,');
   lines.push('  "reason": "если handoff — кратко почему, иначе пустая строка",');
   lines.push('  "stage": "new | interested | inprogress | customer",');
@@ -138,6 +151,18 @@ function history(dialog, limit = 14) {
 /* ------------------------------------------------------- ответ */
 
 const clean = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+
+/**
+ * Очистка текста для клиента. В отличие от clean() сохраняет пустые строки:
+ * модель ставит их там, где живой человек нажал бы «отправить», и по ним
+ * ответ режется на отдельные реплики. Схлопнёшь — получишь стену текста.
+ */
+const cleanReply = s => String(s == null ? '' : s)
+  .replace(/\r\n?/g, '\n')
+  .replace(/[ \t]+/g, ' ')
+  .replace(/ *\n */g, '\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
 
 /**
  * Готовит ответ на последнее сообщение клиента.
@@ -171,9 +196,9 @@ async function reply(w, dialog, question) {
   }
 
   const parsed = groq.extractJson(out.text);
-  if (!parsed || !clean(parsed.reply)) {
+  if (!parsed || !cleanReply(parsed.reply)) {
     // Модель не дала валидный JSON — используем сырой текст, если он есть.
-    const raw = clean(out.text);
+    const raw = cleanReply(out.text);
     if (raw && raw.length < 900 && !raw.startsWith('{')) {
       return { reply: raw, handoff: false, reason: '', stage: dialog.stage || 'new', interest: dialog.interest || '', summary: dialog.summary || '', contact: '', model: out.model, usage: out.usage };
     }
@@ -181,9 +206,9 @@ async function reply(w, dialog, question) {
   }
 
   const stages = ['new', 'interested', 'inprogress', 'customer'];
-  const asked = /\?\s*$/.test(clean(parsed.reply));
+  const asked = /\?\s*$/.test(cleanReply(parsed.reply));
   return {
-    reply: clean(parsed.reply).slice(0, 1500),
+    reply: cleanReply(parsed.reply).slice(0, 1500),
     // Если круг всё же случился, а модель снова переспрашивает — решаем за неё.
     handoff: parsed.handoff === true || parsed.handoff === 'true' || (loop && asked),
     loopBroken: loop && asked || undefined,

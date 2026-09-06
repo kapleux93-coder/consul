@@ -36,6 +36,7 @@ const tg = require('./telegram');
 const limits = require('./limits');
 const extract = require('./extract');
 const backup = require('./backup');
+const human = require('./human');
 
 const PORT = cfg.port;
 const BOT_TOKEN = cfg.botToken;                 // платформенный бот Consul
@@ -207,6 +208,38 @@ async function notifyHandoff(w, dialog, reason) {
 /* ============================================================ приём сообщения клиента */
 
 const inflight = new Set();   // ключи «кабинет:чат», чтобы не отвечать дважды параллельно
+const bursts = new Map();     // ключ → таймер: ждём, договорит ли клиент
+
+/**
+ * Клиент часто пишет очередью: «здравствуйте», «а есть бани», «недорого».
+ * Бот отвечает на каждую строку — человек дочитает и ответит один раз.
+ * Поэтому ждём паузы в BURST_WINDOW и только потом идём к модели.
+ */
+/** Снимает назначенный ответ: владелец вмешался раньше бота. */
+function cancelScheduled(w, chatId) {
+  const key = w.ownerId + ':' + chatId;
+  const pending = bursts.get(key);
+  if (pending) { clearTimeout(pending.timer); bursts.delete(key); }
+}
+
+function scheduleReply(w, msg) {
+  const key = w.ownerId + ':' + msg.chatId;
+  const prev = bursts.get(key);
+  if (prev) clearTimeout(prev.timer);
+
+  const texts = prev ? prev.texts : [];
+  texts.push(msg.text);
+
+  const timer = setTimeout(() => {
+    bursts.delete(key);
+    // Отвечаем на всю очередь разом: в вопрос уходит весь текст,
+    // в истории диалога реплики остаются раздельными.
+    respond(w, msg, texts.join('\n')).catch(e => console.error('[respond] ' + e.message));
+  }, human.BURST_WINDOW);
+  if (timer.unref) timer.unref();
+
+  bursts.set(key, { timer, texts });
+}
 
 async function handleIncoming(w, msg) {
   const token = secret.decrypt(w.bot.tokenEnc);
@@ -274,6 +307,59 @@ async function handleIncoming(w, msg) {
       return;
     }
 
+    /* Человек не отвечает на каждую строку: ждём, договорит ли клиент,
+       и отвечаем на всю очередь разом. */
+    if (cfg.humanize && w.ai.humanize !== false) { scheduleReply(w, msg); return; }
+
+    await respond(w, msg, msg.text);
+  } catch (e) {
+    console.error('[incoming] ' + e.message);
+  } finally {
+    inflight.delete(key);
+  }
+}
+
+
+const responding = new Set();   // отдельный замок: приём и ответ — разные фазы
+
+/**
+ * Отвечает на вопрос клиента. Вызывается либо сразу (машинный режим),
+ * либо после паузы, когда стало ясно, что клиент договорил.
+ *
+ * @param {string} text вся очередь сообщений клиента, склеенная в один вопрос
+ */
+async function respond(w, msg, text) {
+  const key = w.ownerId + ':' + msg.chatId;
+  if (responding.has(key)) return;
+  responding.add(key);
+
+  const token = secret.decrypt(w.bot.tokenEnc);
+  const d = store.dialog(w, msg.chatId);
+  if (!d) { responding.delete(key); return; }
+
+  /* Пока ждали очередь, владелец мог забрать диалог себе или поставить AI
+     на паузу. Проверяем ещё раз: иначе бот влезет в чужой разговор. */
+  if (d.status === 'human' || w.ai.paused) { responding.delete(key); return; }
+
+  /** @returns {Promise<boolean>} доставлено ли сообщение клиенту */
+  const deliver = async out => {
+    if (!token) return true;
+    try {
+      await tg.sendLong(token, msg.chatId, out);
+      return true;
+    } catch (e) {
+      if (e.code === 403 || /bot was blocked|chat not found|user is deactivated/i.test(e.message)) {
+        if (d.status !== 'closed') { d.status = 'closed'; store.save(w); pushDialog(w, d); }
+        console.warn('[tg] клиент ' + msg.chatId + ' недоступен: ' + e.message);
+        return false;
+      }
+      if (e.code === 401) { await onTokenRevoked(w); return false; }
+      throw e;
+    }
+  };
+  const typing = () => { if (token) tg.sendChatAction(token, msg.chatId, 'typing'); };
+
+  try {
     /* Защита от флуда: клиент, шлющий сообщения очередью, не должен
        раскручивать счётчик вызовов модели. */
     if (!limits.allowChat(w.ownerId, msg.chatId)) {
@@ -285,9 +371,9 @@ async function handleIncoming(w, msg) {
        выжечь его целиком. Упёрлись — зовём человека, а не молчим. */
     const quota = limits.checkAiQuota(w);
     if (!quota.ok) {
-      const text = 'Сейчас передам ваш вопрос менеджеру — он ответит здесь же.';
-      if (!(await deliver(text))) { store.save(w); return; }
-      store.pushMessage(w, msg.chatId, { r: 'ai', t: text, ts: Date.now() });
+      const out = 'Сейчас передам ваш вопрос менеджеру — он ответит здесь же.';
+      if (!(await deliver(out))) { store.save(w); return; }
+      store.pushMessage(w, msg.chatId, { r: 'ai', t: out, ts: Date.now() });
       store.pushMessage(w, msg.chatId, { r: 'sys', t: 'Дневной лимит ответов AI исчерпан — диалог передан человеку', ts: Date.now() });
       d.status = 'attention';
       w.counters.handed++;
@@ -298,9 +384,9 @@ async function handleIncoming(w, msg) {
       return;
     }
 
-    if (token) tg.sendChatAction(token, msg.chatId, 'typing');
+    typing();
     const t0 = Date.now();
-    const r = await ai.reply(w, d, msg.text);
+    const r = await ai.reply(w, d, text);
     const ms = Date.now() - t0;
     if (!r.fallback) limits.spendAi(w);
 
@@ -313,11 +399,29 @@ async function handleIncoming(w, msg) {
     w.usage.tokensOut += (r.usage && r.usage.completion_tokens) || 0;
     if (r.fallback) w.usage.errors++;
 
+    // Отправляем как человек: с паузой на «подумать и напечатать» и живым
+    // индикатором. Длинный ответ уходит двумя-тремя репликами, а не стеной.
     // Не доставили (клиент заблокировал бота, токен отозван) — не пишем в ленту
     // ответ, которого клиент не увидит, и не трогаем статус диалога.
-    if (!(await deliver(r.reply))) { store.save(w); return; }
-    store.pushMessage(w, msg.chatId, { r: 'ai', t: r.reply, ts: Date.now(), ms, model: r.model || undefined });
-    w.counters.msgs++;
+    let parts;
+    if (cfg.humanize && w.ai.humanize !== false) {
+      // Клиент ждёт с момента своего последнего сообщения: это и ожидание
+      // очереди, и работа модели. Иначе к десяти секундам добавим ещё семь.
+      const waited = Date.now() - (msg.ts || Date.now());
+      parts = await human.deliver({ send: deliver, typing }, r.reply, waited);
+      if (!parts.length) { store.save(w); return; }
+    } else {
+      if (!(await deliver(r.reply))) { store.save(w); return; }
+      parts = [{ t: r.reply, at: Date.now() }];
+    }
+    // Время у каждой реплики своё, фактическое — иначе в панели владельца
+    // они слипнутся в одну секунду.
+    parts.forEach((p, i) => store.pushMessage(w, msg.chatId, {
+      r: 'ai', t: p.t, ts: p.at,
+      ms: i === 0 ? ms : undefined,
+      model: i === 0 ? (r.model || undefined) : undefined,
+    }));
+    w.counters.msgs += parts.length;
 
     if (r.handoff) {
       d.status = 'attention';
@@ -333,9 +437,9 @@ async function handleIncoming(w, msg) {
       pushDialog(w, d);
     }
   } catch (e) {
-    console.error('[incoming] ' + e.message);
+    console.error('[respond] ' + e.message);
   } finally {
-    inflight.delete(key);
+    responding.delete(key);
   }
 }
 
@@ -491,7 +595,7 @@ const routes = {
     const w = store.getOrCreate(user.id);
     const p = body.patch || body;
     const str = ['name', 'style', 'lang', 'length', 'instructions'];
-    const bool = ['canProducts', 'canContacts', 'canDiscount', 'paused'];
+    const bool = ['canProducts', 'canContacts', 'canDiscount', 'paused', 'humanize'];
     str.forEach(k => { if (p[k] != null) w.ai[k] = clean(p[k], k === 'instructions' ? 1200 : 40); });
     bool.forEach(k => { if (p[k] != null) w.ai[k] = !!p[k]; });
     if (p.lengthVal != null) w.ai.lengthVal = Math.max(0, Math.min(100, Number(p.lengthVal) || 0));
@@ -739,6 +843,7 @@ const routes = {
     const w = store.getOrCreate(user.id);
     const d = store.dialog(w, body.id);
     if (!d) return fail(res, 404, 'Диалог не найден');
+    cancelScheduled(w, d.id);      // бот мог уже собираться ответить
     d.status = 'human';
     d.mgr = clean(body.who, 60) || (w.team[0] && w.team[0].name) || 'менеджер';
     store.pushMessage(w, d.id, { r: 'sys', t: 'Диалог ведёт ' + d.mgr + ' — AI на паузе', ts: Date.now() });

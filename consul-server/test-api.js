@@ -474,6 +474,24 @@ function makeDocx(text) {
     assert.strictEqual(r.status, 400);
   });
 
+  await t('владелец забрал диалог во время ожидания — бот не влезает', async () => {
+    process.env.HUMANIZE = '1';
+    const w = store.getOrCreate(4242);
+    sent.length = 0;
+
+    // сообщение поставлено в очередь, ответ ещё не отправлен
+    await handleIncoming(w, { chatId: 6100, userId: 6100, text: 'есть бани?', firstName: 'Олег', ts: Date.now() });
+    assert.strictEqual(sent.filter(s => s.chatId === 6100).length, 0, 'бот ещё молчит, ждёт очередь');
+
+    // владелец успевает забрать диалог
+    await api('/api/dialog/takeover', { id: '6100', who: 'Анна' });
+    await new Promise(r => setTimeout(r, 3200));
+
+    assert.strictEqual(sent.filter(s => s.chatId === 6100).length, 0, 'бот не ответил поверх человека');
+    assert.strictEqual(store.dialog(store.getOrCreate(4242), 6100).status, 'human');
+    process.env.HUMANIZE = '0';
+  });
+
   await t('проверка достижимости владельца: недоступен, если бот не может писать', async () => {
     const orig = tg.sendChatActionStrict;
     tg.sendChatActionStrict = async () => { const e = new Error('Forbidden: bot was blocked by the user'); e.code = 403; throw e; };
