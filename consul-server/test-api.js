@@ -412,6 +412,29 @@ function makeDocx(text) {
     assert.strictEqual(store.dialog(w, 5555).status, 'closed');
   });
 
+  await t('оповещение о сбоях AI приходит не сразу и не на каждый', async () => {
+    process.env.ADMIN_IDS = '4242';
+
+    // Порог — пять сбоев за десять минут: разовая ошибка админа не будит.
+    groqOn = false;
+    const w = store.getOrCreate(4242);
+    sent.length = 0;
+    for (let i = 0; i < 3; i++) {
+      await handleIncoming(w, { chatId: 8000 + i, userId: 8000 + i, text: 'есть?', firstName: 'К' + i, ts: Date.now() });
+    }
+    const early = sent.filter(s => s.chatId === 4242 && /не отвечает/.test(s.text)).length;
+    assert.strictEqual(early, 0, 'три сбоя — ещё не повод для тревоги');
+
+    for (let i = 3; i < 7; i++) {
+      await handleIncoming(w, { chatId: 8000 + i, userId: 8000 + i, text: 'есть?', firstName: 'К' + i, ts: Date.now() });
+    }
+    const alerts = sent.filter(s => s.chatId === 4242 && /Модель не отвечает/.test(s.text));
+    assert.ok(alerts.length >= 1, 'после пяти сбоев админ предупреждён');
+    assert.strictEqual(alerts.length, 1, 'но только один раз, а не на каждый сбой');
+    groqOn = true;
+    delete process.env.ADMIN_IDS;
+  });
+
   await t('админская сводка закрыта для посторонних', async () => {
     const r = await api('/api/admin/stats');
     assert.strictEqual(r.status, 403);

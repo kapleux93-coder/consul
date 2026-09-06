@@ -208,6 +208,40 @@ async function notifyHandoff(w, dialog, reason) {
   }
 }
 
+/* ============================================================ оповещения владельцу сервиса */
+
+const alerted = new Map();   // вид сбоя → когда сообщали в последний раз
+
+/**
+ * Сообщает в Telegram тем, кто указан в ADMIN_IDS.
+ * Один и тот же вид сбоя — не чаще раза в час: иначе при массовой ошибке
+ * админ получит сотню сообщений и отключит уведомления совсем.
+ */
+async function alertAdmins(kind, text) {
+  if (!BOT_TOKEN || !cfg.adminIds.length) return;
+  const last = alerted.get(kind) || 0;
+  if (Date.now() - last < 3600000) return;
+  alerted.set(kind, Date.now());
+  for (const id of cfg.adminIds) {
+    await tg.sendMessage(BOT_TOKEN, id, '⚠️ Consul\n\n' + text).catch(() => {});
+  }
+}
+
+/**
+ * Следит за долей сбоев AI. Разовая ошибка — не повод будить админа,
+ * а вот пять подряд означают, что бот молчит у всех пользователей.
+ */
+const aiFailures = [];
+function noteAiFailure(reason) {
+  const now = Date.now();
+  aiFailures.push(now);
+  while (aiFailures.length && now - aiFailures[0] > 600000) aiFailures.shift();
+  if (aiFailures.length >= 5) {
+    alertAdmins('ai', 'Модель не отвечает: ' + aiFailures.length + ' сбоев за 10 минут.\n' +
+      'Последняя причина: ' + reason + '\n\nСейчас все диалоги уходят менеджерам.');
+  }
+}
+
 /* ============================================================ приём сообщения клиента */
 
 const inflight = new Set();   // ключи «кабинет:чат», чтобы не отвечать дважды параллельно
@@ -403,7 +437,7 @@ async function respond(w, msg, text) {
     w.usage.calls++;
     w.usage.tokensIn += (r.usage && r.usage.prompt_tokens) || 0;
     w.usage.tokensOut += (r.usage && r.usage.completion_tokens) || 0;
-    if (r.fallback) w.usage.errors++;
+    if (r.fallback) { w.usage.errors++; noteAiFailure(r.error || 'неизвестно'); }
 
     // Отправляем как человек: с паузой на «подумать и напечатать» и живым
     // индикатором. Длинный ответ уходит двумя-тремя репликами, а не стеной.
@@ -1247,6 +1281,7 @@ async function boot() {
     console.error('\n  ✗ Не удалось прочитать хранилище: ' + st.error);
     console.error('    Проверьте UPSTASH_REDIS_REST_URL и UPSTASH_REDIS_REST_TOKEN.');
     console.error('    Запускаться не буду, чтобы не потерять данные.\n');
+    await alertAdmins('store', 'Не читается хранилище: ' + st.error + '\nСервис не запустился.');
     process.exit(1);
   }
   console.log('[store] ' + (st.backend === 'redis' ? 'Redis' : 'файл') + ', кабинетов: ' + st.workspaces);
@@ -1260,6 +1295,7 @@ async function boot() {
       console.log('[groq] ключ работает, модель: ' + (await groq.model()));
     } catch (e) {
       if (/401|invalid.?api.?key/i.test(e.message)) {
+        alertAdmins('groq-key', 'Groq отклонил ключ: бот не отвечает клиентам, все диалоги уходят менеджерам. Проверьте GROQ_API_KEY.');
         console.error('\n  ✗ GROQ_API_KEY отклонён Groq: ключ недействителен.');
         console.error('    Пока это так, бот НЕ отвечает клиентам — все диалоги уходят менеджеру.');
         console.error('    Возьмите рабочий ключ на https://console.groq.com/keys\n');
@@ -1291,6 +1327,10 @@ async function boot() {
     try { await tg.setWebhook(BOT_TOKEN, `${PUBLIC_URL}/tg-platform/${process.env.PLATFORM_WEBHOOK_SECRET}`, process.env.PLATFORM_WEBHOOK_SECRET); }
     catch (e) { console.warn('[tg] вебхук платформенного бота: ' + e.message); }
   }
+
+  // Сбой записи в Redis — данные владельцев под угрозой, сообщаем сразу.
+  store.onWriteError = e => alertAdmins('store-write', 'Не записывается хранилище: ' + e.message +
+    '\nИзменения держатся в памяти и пропадут при перезапуске.');
 
   const sweep = setInterval(() => sweepFollowUps().catch(e => console.error('[followup] ' + e.message)),
     Number(process.env.FOLLOWUP_SWEEP_MS) || 5 * 60 * 1000);

@@ -1008,6 +1008,7 @@ function checklist(){
   ];
 }
 
+let finishConfirmed = false;   // владелец сознательно уходит без базы знаний
 let testLog = [];
 MOUNT.test = el => {
   const feed = $('#testFeed', el);
@@ -2087,10 +2088,24 @@ const ACT = {
   solo: () => { S.team = []; save(); ACT['to-test'](); },
   'to-test': () => { S.step = 5; testLog = []; save(); pushStep(); go('test'); },
 
+  'add-knowledge-now': () => { closeSheet(); setTimeout(()=>kbSheet('price'), 300); },
+  'finish-anyway': () => { finishConfirmed = true; closeSheet(); setTimeout(()=>ACT.finish(), 250); },
+
   'test-q': (b) => testSend(b.dataset.q),
   'test-send': () => testSend(),
   'focus-test': () => { const i = $('#testInp'); if(i){ i.focus(); i.scrollIntoView({block:'center',behavior:'smooth'}); } },
   finish: async () => {
+    // Без материалов бот будет передавать человеку каждый вопрос. Молча выпускать
+    // владельца в такой режим нельзя: он решит, что продукт сломан.
+    const ready = S.knowledge.filter(k => k.ready).length;
+    if(NET.on && !ready && !finishConfirmed){
+      sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Бот пока ничего не знает</div>
+          <div class="sub-s">Вы не добавили ни одного материала. Без них AI не сможет отвечать по фактам и будет передавать вам <b>каждый</b> вопрос о товарах, ценах и доставке.</div></div>
+        <div class="box warm" style="border-radius:16px">Хватит пары абзацев: перечислите товары с ценами и условия доставки своими словами. Это тридцать секунд.</div>
+        <button class="btn" data-act="add-knowledge-now">Добавить материалы</button>
+        <button class="link" data-act="finish-anyway">Всё равно продолжить</button>`);
+      return;
+    }
     if(NET.on){
       try { await NET.req('/api/onboarded', {}); } catch(e){ return netErr(e); }
       S.onboarded = true; save(); haptic('ok'); stack = []; go('home'); return;

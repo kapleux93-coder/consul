@@ -70,7 +70,11 @@ const cfg = {
     if (process.env.HOST) return process.env.HOST;
     return this.allowInsecureAuth ? '127.0.0.1' : '0.0.0.0';
   },
-  adminIds: String(process.env.ADMIN_IDS || '').split(',').map(s => Number(s.trim())).filter(Boolean),
+  // Читаем при обращении, а не при загрузке: иначе переменную нельзя
+  // ни поменять на лету, ни подставить в тесте.
+  get adminIds() {
+    return String(process.env.ADMIN_IDS || '').split(',').map(s => Number(s.trim())).filter(Boolean);
+  },
 
   /* Лимиты — защита вашего ключа Groq от одного слишком активного кабинета. */
   limits: {

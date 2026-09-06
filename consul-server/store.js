@@ -97,6 +97,7 @@ async function flushRedis() {
     await redis(['SET', REDIS_KEY, JSON.stringify(db)]);
   } catch (e) {
     console.error('[store] запись в Redis не удалась:', e.message);
+    if (typeof module.exports.onWriteError === 'function') module.exports.onWriteError(e);
     dirtyAgain = true;   // попробуем на следующем сохранении
   } finally {
     writing = false;
