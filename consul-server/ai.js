@@ -76,7 +76,11 @@ function systemPrompt(w, chunks) {
   lines.push(`- ${LENGTH[lengthKey(ai)]}`);
   lines.push('- Ты пишешь в чат мессенджера: без markdown-заголовков, без «Здравствуйте» в каждом сообщении.');
   lines.push('- Отвечай ТОЛЬКО фактами из блока ЗНАНИЯ и из истории диалога. Не выдумывай цены, сроки, наличие, характеристики и адреса.');
-  lines.push('- Если фактов не хватает — либо задай один уточняющий вопрос, либо передай диалог человеку.');
+  // Разделяем два случая. Иначе бот с пустой базой уходит в бесконечное
+  // «уточните, пожалуйста»: фактов нет никогда, а уточнять разрешено всегда.
+  lines.push('- Уточняющий вопрос задавай ТОЛЬКО когда нужные факты в ЗНАНИЯХ есть, но надо сузить выбор.');
+  lines.push('- Если нужных фактов в ЗНАНИЯХ нет вообще — не переспрашивай, а сразу передавай диалог человеку (handoff = true).');
+  lines.push('- Никогда не задавай подряд два уточняющих вопроса, не сообщив ни одного факта. Второй раз — сразу handoff.');
   if (ai.instructions) lines.push(`- Указания владельца: ${ai.instructions}`);
   if (ai.styleProfile && ai.styleProfile.instructions) {
     lines.push('');
@@ -104,7 +108,9 @@ function systemPrompt(w, chunks) {
     lines.push('ЗНАНИЯ (единственный источник фактов о компании)');
     chunks.forEach(c => { lines.push(`### ${c.title}`); lines.push(c.body); lines.push(''); });
   } else {
-    lines.push('ЗНАНИЯ: пусто. Фактов о товарах, ценах и условиях у тебя нет — любые такие вопросы передавай человеку (handoff = true).');
+    lines.push('ЗНАНИЯ: пусто. Фактов о товарах, ценах, размерах и условиях у тебя нет вообще.');
+    lines.push('Поэтому на любой вопрос по существу отвечай handoff = true и короткой фразой, что подключаешь менеджера.');
+    lines.push('НЕ переспрашивай и не уточняй: уточнение всё равно ничего не даст, ты не узнаешь ответ.');
     lines.push('');
   }
   lines.push('ФОРМАТ ОТВЕТА — строго один JSON-объект, без текста вокруг:');
@@ -147,9 +153,18 @@ async function reply(w, dialog, question) {
 
   if (!groq.enabled()) return offline(w, 'AI не настроен: нет GROQ_API_KEY');
 
+  /* Защита от круга «уточните, пожалуйста». Модель может проигнорировать
+     инструкцию, поэтому считаем сами: если два последних ответа бота были
+     вопросами и ни одного факта клиент не услышал — хватит, зовём человека. */
+  const loop = questionLoop(dialog);
+  const sysFinal = loop
+    ? sys + '\n\nВАЖНО: ты уже дважды переспросил и не сообщил клиенту ни одного факта. ' +
+            'Больше не уточняй. Ответь handoff = true и короткой фразой, что подключаешь менеджера.'
+    : sys;
+
   let out;
   try {
-    out = await groq.chat({ system: sys, messages: msgs, json: true, maxTokens: 600, temperature: 0.4 });
+    out = await groq.chat({ system: sysFinal, messages: msgs, json: true, maxTokens: 600, temperature: 0.4 });
   } catch (e) {
     console.error('[ai] groq: ' + e.message);
     return offline(w, e.message);
@@ -166,10 +181,13 @@ async function reply(w, dialog, question) {
   }
 
   const stages = ['new', 'interested', 'inprogress', 'customer'];
+  const asked = /\?\s*$/.test(clean(parsed.reply));
   return {
     reply: clean(parsed.reply).slice(0, 1500),
-    handoff: parsed.handoff === true || parsed.handoff === 'true',
-    reason: clean(parsed.reason).slice(0, 120),
+    // Если круг всё же случился, а модель снова переспрашивает — решаем за неё.
+    handoff: parsed.handoff === true || parsed.handoff === 'true' || (loop && asked),
+    loopBroken: loop && asked || undefined,
+    reason: clean(parsed.reason).slice(0, 120) || (loop && asked ? 'нет данных для ответа' : ''),
     stage: stages.includes(parsed.stage) ? parsed.stage : (dialog.stage || 'new'),
     interest: clean(parsed.interest).slice(0, 80) || dialog.interest || '',
     summary: clean(parsed.summary).slice(0, 400) || dialog.summary || '',
@@ -177,6 +195,20 @@ async function reply(w, dialog, question) {
     model: out.model,
     usage: out.usage || {},
   };
+}
+
+/**
+ * Два последних ответа бота были вопросами и не содержали фактов?
+ * Признак факта — цифра (цена, размер, срок) или ссылка: если их нет,
+ * клиент по сути ничего не узнал.
+ */
+function questionLoop(dialog) {
+  const botTurns = (dialog.msgs || []).filter(m => m.r === 'ai').slice(-2);
+  if (botTurns.length < 2) return false;
+  return botTurns.every(m => {
+    const t = String(m.t || '').trim();
+    return /\?\s*$/.test(t) && !/\d/.test(t);
+  });
 }
 
 /** Ответ, когда модель недоступна: честно зовём человека. */
@@ -314,6 +346,6 @@ async function analyzeStyle(w, replies) {
 }
 
 module.exports = {
-  reply, channelPost, systemPrompt, retrieve, terms, lengthKey,
+  reply, channelPost, systemPrompt, retrieve, terms, lengthKey, questionLoop,
   customerMessage, analyzeStyle, SCENARIOS,
 };
