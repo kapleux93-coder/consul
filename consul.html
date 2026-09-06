@@ -435,6 +435,18 @@ const pushAI  = debounce(() => { if(NET.on) NET.req('/api/ai', { patch: S.ai }).
 const pushStep = debounce(() => { if(NET.on) NET.req('/api/step', { step: S.step }).catch(()=>{}); }, 800);
 
 /** Переносит состояние с сервера в S, сохраняя форму, которую ждут экраны. */
+/* Часовой пояс устройства владельца. Тихие часы сервер считает по нему: без
+ * этого «не писать ночью с 22:00» означало бы 22:00 в Москве, и клиенту во
+ * Владивостоке бот написал бы в четыре утра. */
+function deviceTz(){
+  const h = -Math.round(new Date().getTimezoneOffset() / 60);
+  return Math.max(-12, Math.min(14, h));
+}
+function tzLabel(off){
+  const h = off ?? deviceTz();
+  return 'UTC' + (h >= 0 ? '+' : '−') + Math.abs(h);
+}
+
 function applyState(st){
   if(!st) return;
   S.onboarded = st.onboarded;
@@ -444,6 +456,10 @@ function applyState(st){
   // Собираем от дефолтов, а не поверх текущего: иначе удалённые на сервере
   // поля (например, снятый профиль стиля) остались бы висеть в клиенте.
   S.ai = Object.assign({}, seed().ai, st.ai);
+  // Сервер не знает, где находится владелец, и по умолчанию считает время по
+  // Москве. Подсказываем ему пояс устройства — иначе тихие часы сдвинуты.
+  const tz = deviceTz();
+  if(NET.on && S.ai.tzOffset !== tz){ S.ai.tzOffset = tz; pushAI(); }
   S.team = st.team || [];
   S.depts = st.depts || S.depts;
   S.knowledge = st.knowledge || [];
@@ -1623,7 +1639,7 @@ VIEWS.aiset = () => `
         </button>
         <button class="between" style="padding:13px 0;width:100%" data-act="pick-quiet">
           <div class="col g4" style="text-align:left"><div style="font:500 15px/1 var(--f)">Не писать ночью</div>
-            <div class="cap2">по времени вашего города</div></div>
+            <div class="cap2">по вашему времени, ${tzLabel(S.ai.tzOffset)}</div></div>
           <div class="a">${String(S.ai.quietFrom ?? 22).padStart(2,'0')}:00 — ${String(S.ai.quietTo ?? 9).padStart(2,'0')}:00</div>
         </button>` : ''}
       </div></div>
