@@ -37,6 +37,7 @@ const limits = require('./limits');
 const extract = require('./extract');
 const backup = require('./backup');
 const human = require('./human');
+const followup = require('./followup');
 
 const PORT = cfg.port;
 const BOT_TOKEN = cfg.botToken;                 // платформенный бот Consul
@@ -183,6 +184,8 @@ const publicDialog = d => ({
   id: d.id, name: d.name, full: d.full, un: d.un, phone: d.phone, status: d.status, stage: d.stage,
   unread: d.unread, ts: d.ts, touches: d.touches, interest: d.interest, summary: d.summary,
   mgr: d.mgr, note: d.note, msgs: d.msgs,
+  nextStep: d.nextStep || '', temperature: d.temperature || '',
+  objection: d.objection || '', followedUp: d.followedUp || 0,
 });
 
 /* ============================================================ уведомления */
@@ -394,6 +397,9 @@ async function respond(w, msg, text) {
     if (r.interest) d.interest = r.interest;
     if (r.summary) d.summary = r.summary;
     if (r.contact && !d.phone) d.phone = r.contact;
+    if (r.nextStep) d.nextStep = r.nextStep;
+    if (r.temperature) d.temperature = r.temperature;
+    d.objection = r.objection || '';
     w.usage.calls++;
     w.usage.tokensIn += (r.usage && r.usage.prompt_tokens) || 0;
     w.usage.tokensOut += (r.usage && r.usage.completion_tokens) || 0;
@@ -440,6 +446,69 @@ async function respond(w, msg, text) {
     console.error('[respond] ' + e.message);
   } finally {
     responding.delete(key);
+  }
+}
+
+/* ============================================================ возврат замолчавших */
+
+/**
+ * Раз в несколько минут обходит диалоги и возвращает тех, кто замолчал
+ * на середине разговора. Правила «когда уместно» — в followup.js,
+ * здесь только отправка и учёт.
+ */
+async function sweepFollowUps() {
+  if (!groq.enabled()) return;
+  for (const w of store.allConnected()) {
+    const token = secret.decrypt(w.bot.tokenEnc);
+    if (!token) continue;
+
+    for (const d of Object.values(w.dialogs || {})) {
+      const verdict = followup.shouldFollowUp(w, d);
+      if (!verdict.ok) continue;
+
+      // Напоминание тоже стоит денег: за квоту не выходим.
+      if (!limits.checkAiQuota(w).ok) continue;
+
+      // Помечаем до отправки: если упадём, второй раз не полезем.
+      d.followedUp = Date.now();
+      store.save(w);
+
+      try {
+        const note = await followup.compose(w, d, verdict);
+        limits.spendAi(w);
+        w.usage.calls++;
+        w.usage.tokensIn += (note.usage && note.usage.prompt_tokens) || 0;
+        w.usage.tokensOut += (note.usage && note.usage.completion_tokens) || 0;
+
+        const io = {
+          send: async text => {
+            try { await tg.sendLong(token, d.chatId, text); return true; }
+            catch (e) {
+              if (e.code === 403 || /blocked|chat not found/i.test(e.message)) {
+                d.status = 'closed'; return false;
+              }
+              if (e.code === 401) { await onTokenRevoked(w); return false; }
+              throw e;
+            }
+          },
+          typing: () => tg.sendChatAction(token, d.chatId, 'typing'),
+        };
+
+        const sent = cfg.humanize && w.ai.humanize !== false
+          ? await human.deliver(io, note.text, 0)
+          : (await io.send(note.text) ? [{ t: note.text, at: Date.now() }] : []);
+
+        if (!sent.length) { store.save(w); continue; }
+        sent.forEach(x => store.pushMessage(w, d.chatId, { r: 'ai', t: x.t, ts: x.at, followUp: true }));
+        w.counters.msgs += sent.length;
+        store.save(w);
+        pushDialog(w, d);
+        console.log('[followup] @' + w.bot.username + ' → ' + d.chatId + ', молчал ' + verdict.minutes + ' мин');
+      } catch (e) {
+        console.error('[followup] ' + e.message);
+        store.save(w);
+      }
+    }
   }
 }
 
@@ -595,7 +664,14 @@ const routes = {
     const w = store.getOrCreate(user.id);
     const p = body.patch || body;
     const str = ['name', 'style', 'lang', 'length', 'instructions'];
-    const bool = ['canProducts', 'canContacts', 'canDiscount', 'paused', 'humanize'];
+    const bool = ['canProducts', 'canContacts', 'canDiscount', 'paused', 'humanize', 'selling', 'followUp'];
+    const nums = { followUpMin: [10, 1440], quietFrom: [0, 23], quietTo: [0, 23], tzOffset: [-12, 14] };
+    for (const [k, [lo, hi]] of Object.entries(nums)) {
+      if (p[k] != null) {
+        const v = Number(p[k]);
+        if (Number.isFinite(v)) w.ai[k] = Math.max(lo, Math.min(hi, Math.round(v)));
+      }
+    }
     str.forEach(k => { if (p[k] != null) w.ai[k] = clean(p[k], k === 'instructions' ? 1200 : 40); });
     bool.forEach(k => { if (p[k] != null) w.ai[k] = !!p[k]; });
     if (p.lengthVal != null) w.ai.lengthVal = Math.max(0, Math.min(100, Number(p.lengthVal) || 0));
@@ -1216,6 +1292,10 @@ async function boot() {
     catch (e) { console.warn('[tg] вебхук платформенного бота: ' + e.message); }
   }
 
+  const sweep = setInterval(() => sweepFollowUps().catch(e => console.error('[followup] ' + e.message)),
+    Number(process.env.FOLLOWUP_SWEEP_MS) || 5 * 60 * 1000);
+  if (sweep.unref) sweep.unref();
+
   // Копии на диск имеют смысл только когда там же лежит и сама база.
   if (store.backend === 'file') backup.schedule(store._file);
   else console.log('[backup] база во внешнем Redis — локальные копии не делаю');
@@ -1238,4 +1318,4 @@ process.on('SIGTERM', shutdown);
 
 if (require.main === module) boot();
 
-module.exports = { server, verifyInitData, publicState, handleIncoming, htmlToText, routes, boot };
+module.exports = { server, verifyInitData, publicState, handleIncoming, htmlToText, routes, boot, sweepFollowUps };

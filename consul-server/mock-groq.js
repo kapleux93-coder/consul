@@ -17,8 +17,11 @@ const MODEL = 'mock-groq-rules';
 
 /** Достаёт факты из блока ЗНАНИЯ системного промпта. */
 function factLines(system) {
-  const start = system.indexOf('ЗНАНИЯ');
-  if (start < 0) return [];
+  // Именно заголовок в начале строки: слово «ЗНАНИЯХ» встречается и в правилах
+  // выше, а по нему заглушка начинала выдавать клиенту куски промпта.
+  const m = /^ЗНАНИЯ[ :(]/m.exec(system);   // без \b: с кириллицей он не работает
+  if (!m) return [];
+  const start = m.index;
   const end = system.indexOf('ФОРМАТ ОТВЕТА', start);
   return system.slice(start, end < 0 ? undefined : end)
     .split('\n').map(s => s.trim())
@@ -52,12 +55,19 @@ function answer(system, question) {
   const reply = hit
     ? hit.slice(0, 220) + (/[.?!]$/.test(hit.slice(0, 220)) ? '' : '.') + '\n\nПоказать подробнее?'
     : 'Подскажите, что именно ищете — подберу вариант и назову цену.';
+  // Заглушка изображает продавца: температура, следующий шаг, возражение.
+  const objection = /дорог|дешевле|подума|竞|конкурент/i.test(q) ? 'смущает цена' : '';
+  const temperature = /беру|оформ|давайте|куплю|счёт/i.test(q) ? 'hot'
+    : /дорог|подума|сравн/i.test(q) ? 'warm' : 'warm';
   return {
     reply, handoff: false, reason: '',
     stage: 'interested',
     interest: words.slice(0, 3).join(' '),
     summary: 'Интересуется: ' + question.slice(0, 90),
     contact: (question.match(/(\+7|8)\d{9,}/) || [''])[0],
+    nextStep: 'прислать фото',
+    temperature,
+    objection,
   };
 }
 
@@ -144,6 +154,8 @@ const srv = http.createServer((req, res) => {
     let content;
     if (/посты для Telegram-канала/.test(system)) {
       content = JSON.stringify({ text: 'Привезли новое — ' + question.replace(/^Формат:.*Тема:\s*/i, '') + '.\n\nПодобрать вариант можно прямо в боте: напишите, что нужно.' });
+    } else if (/Клиент перестал отвечать/.test(system)) {
+      content = JSON.stringify({ text: 'Посчитал доставку — по области бесплатно. Прислать фото готовой 4х6?' });
     } else if (/Ты играешь ПОКУПАТЕЛЯ/.test(system)) {
       content = JSON.stringify(customerTurn(system, msgs));
     } else if (/разбираешь манеру письма продавца/.test(system)) {

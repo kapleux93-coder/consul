@@ -146,6 +146,12 @@ function defaults(ownerId) {
       banned: [],
       paused: false,
       humanize: true,   // паузы, разбиение на реплики, ответ на очередь разом
+      selling: true,    // активно продавать, а не просто отвечать на вопросы
+      followUp: true,   // напомнить о себе, если клиент замолчал на середине
+      followUpMin: 45,  // через сколько минут тишины
+      quietFrom: 22,    // не писать первым с 22:00
+      quietTo: 9,       // и до 9:00
+      tzOffset: 3,      // часовой пояс бизнеса относительно UTC
     },
     team: [], depts: ['Sales', 'Support'],
     knowledge: [],
@@ -254,6 +260,7 @@ function upsertDialog(w, chatId, patch) {
     id: key, chatId: Number(chatId), name: '', full: '', un: '', phone: '',
     status: 'ai', stage: 'new', unread: false, ts: Date.now(), touches: 0,
     msgs: [], summary: '', interest: '', mgr: '—', note: '',
+    nextStep: '', temperature: '', objection: '', followedUp: 0,
   };
   w.dialogs[key] = Object.assign(cur, patch);
   return w.dialogs[key];

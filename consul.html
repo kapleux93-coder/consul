@@ -706,6 +706,13 @@ function botCard(){
     <div style="font:500 14px/1 var(--m);color:var(--muted3)">@${esc(b.username)}</div></div>
   </div>`;
 }
+/** Насколько клиент близок к покупке — по оценке модели после каждого ответа. */
+function tempBadge(t){
+  if(t === 'hot')  return `<div class="badge" style="background:#FFE9DE;color:#C9531A">🔥 ГОРЯЧИЙ</div>`;
+  if(t === 'warm') return `<div class="badge" style="background:#FFF4EC;color:#B0764C">ТЁПЛЫЙ</div>`;
+  return '';
+}
+
 function statusBadge(st){
   if(st === 'attention') return `<div class="badge att">NEEDS ATTENTION</div>`;
   if(st === 'human')     return `<div class="badge human">HUMAN</div>`;
@@ -1211,7 +1218,10 @@ function inboxRows(){
           <div style="font:${d.unread?'500':'400'} 12px/1 var(--f);color:${d.unread?'var(--accent-d)':'var(--muted5)'}">${hhmm(d.ts)}</div>
         </div>
         <div style="font:${d.unread?'500':'400'} 13px/1.35 var(--f);color:${d.unread?'var(--ink2)':'var(--muted2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(lastLine(d))}</div>
-        <div style="align-self:flex-start">${d.status==='human'&&d.mgr!=='—'?`<div class="badge human">HUMAN · ${esc(d.mgr.split(' ')[0])}</div>`:statusBadge(d.status)}</div>
+        <div class="row wrap g6" style="align-self:flex-start">
+          ${d.status==='human'&&d.mgr!=='—'?`<div class="badge human">HUMAN · ${esc(d.mgr.split(' ')[0])}</div>`:statusBadge(d.status)}
+          ${tempBadge(d.temperature)}
+        </div>
       </div>
     </button>${i<list.length-1?'<div class="sep"></div>':''}`).join('');
 }
@@ -1266,7 +1276,8 @@ function chatMsgs(d){
     if(m.r === 'sys') return out + `<div class="bub sys">${esc(m.t)}</div>`;
     if(m.r === 'user') return out + `<div class="bub in">${esc(m.t)}</div>`;
     const who = m.r === 'human' ? (m.who || meName()) : 'AI';
-    return out + `<div class="bub out">${esc(m.t)}</div><div class="meta" style="align-self:flex-end">${esc(who)} · ${hhmm(m.ts||now())}</div>`;
+    const tag = m.followUp ? ' · напоминание' : '';
+    return out + `<div class="bub out">${esc(m.t)}</div><div class="meta" style="align-self:flex-end">${esc(who)} · ${hhmm(m.ts||now())}${tag}</div>`;
   }).join('');
 }
 function dayLabel(ts){
@@ -1369,14 +1380,21 @@ function clientBig(d){
       <div class="av warm" style="width:44px;height:44px">${esc(initials(d.full))}</div>
       <div class="f1 col g4"><div class="h5">${esc(d.full)}</div>
         <div style="font:500 13px/1 var(--m);color:var(--muted4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${[d.un ? '@' + esc(d.un) : '', esc(d.phone)].filter(Boolean).join(' · ') || 'контактов пока нет'}</div></div>
-      <div class="badge none ${d.stage==='customer'?'ok':d.stage==='interested'?'att':d.stage==='inprogress'?'human':'ai'}">${stageName(d.stage).toUpperCase()}</div>
+      <div class="col g4" style="align-items:flex-end">
+        <div class="badge none ${d.stage==='customer'?'ok':d.stage==='interested'?'att':d.stage==='inprogress'?'human':'ai'}">${stageName(d.stage).toUpperCase()}</div>
+        ${tempBadge(d.temperature)}
+      </div>
     </div>
     <div style="background:var(--card);border:1px solid var(--accent-b);border-radius:13px;padding:12px;display:flex;flex-direction:column;gap:6px">
       <div class="row g6"><div style="width:5px;height:5px;border-radius:3px;background:var(--accent)"></div>
         <div style="font:600 11px/1 var(--m);letter-spacing:.08em;color:var(--accent-d)">AI SUMMARY</div></div>
       <div style="font:400 13px/1.45 var(--f);color:var(--ink2)">${esc(d.summary)}</div>
     </div>
+    ${d.objection ? `<div class="box plain" style="border-radius:13px;padding:12px;display:flex;gap:9px;align-items:flex-start;border-color:var(--accent-b)">
+      <div style="font:600 11px/1.3 var(--m);letter-spacing:.06em;color:var(--accent-d);flex:none;padding-top:1px">СТОП</div>
+      <div style="font:400 13px/1.4 var(--f);color:var(--ink2)">${esc(d.objection)}</div></div>` : ''}
     <div class="col g8">
+      ${d.nextStep ? `<div class="between"><div class="cap" style="font-size:13px">Следующий шаг</div><div style="font:500 13px/1 var(--f);color:var(--accent-d)">${esc(d.nextStep)}</div></div>` : ''}
       <div class="between"><div class="cap" style="font-size:13px">Интерес</div><div style="font:500 13px/1 var(--f)">${esc(d.interest)}</div></div>
       <div class="between"><div class="cap" style="font-size:13px">Менеджер</div><div style="font:500 13px/1 var(--f)">${esc(d.mgr)}</div></div>
       <div class="between"><div class="cap" style="font-size:13px">Обращений</div><div style="font:500 13px/1 var(--f)">${d.touches} · последнее ${hhmm(d.ts)}</div></div>
@@ -1581,6 +1599,32 @@ VIEWS.aiset = () => `
         ${[['canProducts','Отвечать о товарах и ценах'],['canContacts','Собирать телефон и имя'],['canDiscount','Давать скидки']].map(([k,l])=>
           `<div class="between" style="padding:13px 0"><div style="font:500 15px/1 var(--f)">${l}</div>
             <button class="sw ${S.ai[k]?'on':''}" data-act="toggle-ai" data-k="${k}" data-re="1"><i></i></button></div>`).join('')}
+      </div></div>
+    <div class="col g9"><div class="lbl">Как продаёт</div>
+      <div class="list" style="padding:4px 14px">
+        <div class="between" style="padding:13px 0">
+          <div class="col g4" style="padding-right:12px">
+            <div style="font:500 15px/1 var(--f)">Активно продавать</div>
+            <div class="cap2">Выясняет задачу, рекомендует один вариант, предлагает следующий шаг и работает с возражениями. Выключено — просто отвечает на вопросы.</div>
+          </div>
+          <button class="sw ${S.ai.selling !== false ?'on':''}" data-act="toggle-ai" data-k="selling"><i></i></button>
+        </div>
+        <div class="between" style="padding:13px 0">
+          <div class="col g4" style="padding-right:12px">
+            <div style="font:500 15px/1 var(--f)">Возвращать замолчавших</div>
+            <div class="cap2">Если клиент пропал на середине разговора, бот напишет один раз через ${S.ai.followUpMin || 45} мин. После отказа и ночью не пишет.</div>
+          </div>
+          <button class="sw ${S.ai.followUp !== false ?'on':''}" data-act="toggle-ai" data-k="followUp"><i></i></button>
+        </div>
+        ${S.ai.followUp !== false ? `<button class="between" style="padding:13px 0;width:100%" data-act="pick-followup">
+          <div style="font:500 15px/1 var(--f)">Через сколько напоминать</div>
+          <div class="a">${S.ai.followUpMin || 45} мин</div>
+        </button>
+        <button class="between" style="padding:13px 0;width:100%" data-act="pick-quiet">
+          <div class="col g4" style="text-align:left"><div style="font:500 15px/1 var(--f)">Не писать ночью</div>
+            <div class="cap2">по времени вашего города</div></div>
+          <div class="a">${String(S.ai.quietFrom ?? 22).padStart(2,'0')}:00 — ${String(S.ai.quietTo ?? 9).padStart(2,'0')}:00</div>
+        </button>` : ''}
       </div></div>
     <div class="col g9"><div class="lbl">Как отвечает</div>
       <div class="list" style="padding:4px 14px">
@@ -2166,6 +2210,20 @@ const ACT = {
   }, 'Добавить'),
   'rm-banned': (b) => { S.ai.banned.splice(+b.dataset.i, 1); save(); pushAI(); const n = $('#banned'); if(n) n.innerHTML = bannedChips(); renderPreview(); haptic('sel'); },
   'preview-refresh': () => { previewQ++; renderPreview(); haptic('light'); },
+
+  'pick-followup': () => pickSheet('Через сколько напоминать',
+    [['20','20 минут'],['45','45 минут'],['120','2 часа'],['360','6 часов'],['1440','Через сутки']],
+    String(S.ai.followUpMin || 45),
+    v => { S.ai.followUpMin = +v; save(); pushAI(); paint('aiset', false); }),
+
+  'pick-quiet': () => pickSheet('Не писать первым',
+    [['22-9','22:00 — 9:00'],['21-10','21:00 — 10:00'],['23-8','23:00 — 8:00'],['0-0','Писать в любое время']],
+    (S.ai.quietFrom ?? 22) + '-' + (S.ai.quietTo ?? 9),
+    v => {
+      const [a, b] = v.split('-').map(Number);
+      S.ai.quietFrom = a; S.ai.quietTo = b;
+      save(); pushAI(); paint('aiset', false);
+    }),
 
   /* --- тренировка стиля --- */
   'style-train': () => { train = { scenarios: train && train.scenarios, log: [] }; go('styletrain'); },

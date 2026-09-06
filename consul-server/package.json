@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "node dev.js",
     "local": "ALLOW_INSECURE_AUTH=1 node server.js",
-    "test": "HUMANIZE=0 node test-store.js && HUMANIZE=0 node test-auth.js && HUMANIZE=0 node test-groq.js && HUMANIZE=0 node test-extract.js && HUMANIZE=0 node test-limits.js && HUMANIZE=0 node test-backup.js && HUMANIZE=0 node test-redis.js && HUMANIZE=0 node test-human.js && HUMANIZE=0 node test-ai.js && HUMANIZE=0 node test-api.js",
+    "test": "HUMANIZE=0 node test-store.js && HUMANIZE=0 node test-auth.js && HUMANIZE=0 node test-groq.js && HUMANIZE=0 node test-extract.js && HUMANIZE=0 node test-limits.js && HUMANIZE=0 node test-backup.js && HUMANIZE=0 node test-redis.js && HUMANIZE=0 node test-human.js && HUMANIZE=0 node test-followup.js && HUMANIZE=0 node test-ai.js && HUMANIZE=0 node test-api.js",
     "models": "node groq.js --list",
     "setup": "node setup.js"
   },
