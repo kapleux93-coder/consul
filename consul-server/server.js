@@ -39,6 +39,7 @@ const backup = require('./backup');
 const human = require('./human');
 const followup = require('./followup');
 const legal = require('./legal');
+const awake = require('./awake');
 
 const PORT = cfg.port;
 const BOT_TOKEN = cfg.botToken;                 // платформенный бот Consul
@@ -211,6 +212,29 @@ async function notifyHandoff(w, dialog, reason) {
 
 /* ============================================================ оповещения владельцу сервиса */
 
+/* ------------------------------------------------------ устаревшие сообщения */
+
+/* Сообщение может пролежать в очереди Telegram, пока сервис спал или
+ * перезапускался: на бесплатном хостинге инстанс засыпает через четверть часа,
+ * и всё это время getUpdates никто не вызывает. Отвечать на такое как на
+ * свежее нельзя — клиент спросил цену час назад и уже занялся другим делом.
+ * Бодрое «Здравствуйте!» без единого слова о задержке читается как издёвка. */
+const STALE_MS = (Number(process.env.STALE_MINUTES) || 15) * 60000;
+
+/** Насколько сообщение просрочено, в миллисекундах. 0 — свежее. */
+function staleBy(msg) {
+  const age = Date.now() - (msg && msg.ts ? msg.ts : Date.now());
+  return age > STALE_MS ? age : 0;
+}
+
+/** Одна строка извинения перед ответом. Без указания точного времени: если
+ *  сервис лежал три часа, называть эту цифру клиенту незачем. */
+function apology(age) {
+  return age > 2 * 3600000
+    ? 'Извините, что отвечаю только сейчас.'
+    : 'Извините за задержку.';
+}
+
 const alerted = new Map();   // вид сбоя → когда сообщали в последний раз
 
 /**
@@ -241,6 +265,17 @@ function noteAiFailure(reason) {
     alertAdmins('ai', 'Модель не отвечает: ' + aiFailures.length + ' сбоев за 10 минут.\n' +
       'Последняя причина: ' + reason + '\n\nСейчас все диалоги уходят менеджерам.');
   }
+}
+
+/* Клиенты не получают ответа, пока сервис лежит, — а владелец сервиса об этом
+ * узнаёт последним. Сообщаем: почти всегда это значит, что инстанс уснул и
+ * пинговалка не работает. */
+function noteStale(age) {
+  const min = Math.round(age / 60000);
+  console.warn('[stale] сообщение ждало ответа ' + min + ' мин — сервис был недоступен');
+  alertAdmins('stale', 'Клиент ждал ответа ' + min + ' мин: всё это время сервис не забирал ' +
+    'сообщения из Telegram.\n\nСкорее всего, инстанс уснул. Проверьте, что пинговалка ' +
+    'стучится на /health хотя бы раз в 10 минут.');
 }
 
 /* ============================================================ приём сообщения клиента */
@@ -420,6 +455,17 @@ async function respond(w, msg, text) {
         ? 'исчерпан дневной лимит ответов AI (' + quota.limit + ')'
         : 'сервис достиг общего дневного лимита ответов');
       return;
+    }
+
+    /* Сообщение ждало ответа, пока сервис был недоступен: сначала извиняемся
+       отдельной строкой, и только потом отвечаем по существу. */
+    const late = staleBy(msg);
+    if (late) {
+      const sorry = apology(late);
+      if (!(await deliver(sorry))) { store.save(w); return; }
+      store.pushMessage(w, msg.chatId, { r: 'ai', t: sorry, ts: Date.now() });
+      w.counters.msgs++;
+      noteStale(late);
     }
 
     typing();
@@ -1014,7 +1060,9 @@ const routes = {
       lastName: clean(body.lastName, 40) || 'Клиент',
       username: clean(body.username, 40) || 'test_client',
       isCommand: /^\//.test(String(body.text || '')),
-      ts: Date.now(),
+      // Можно подделать время отправки — так проверяют поведение с
+      // сообщением, пролежавшим в очереди, пока сервис был недоступен.
+      ts: Number(body.ts) || Date.now(),
     });
     ok(res, { ok: true, state: publicState(w) });
   },
@@ -1348,6 +1396,19 @@ async function boot() {
   if (store.backend === 'file') backup.schedule(store._file);
   else console.log('[backup] база во внешнем Redis — локальные копии не делаю');
 
+  /* Бесплатный хостинг усыпляет инстанс, а спящий сервис не забирает
+     сообщения из Telegram. Стучимся к себе сами — это не отменяет внешнюю
+     пинговалку (уснувший процесс себя не разбудит), но закрывает случай,
+     когда её забыли включить. */
+  const ka = awake.start(cfg.publicUrl);
+  if (ka.on) {
+    console.log('[awake] держу сервис бодрым: стучусь к себе раз в ' + ka.minutes + ' мин');
+    console.log('        это ~720 часов инстанса в месяц из 750 бесплатных — запаса нет.');
+    console.log('        Внешняя пинговалка на /health надёжнее: она разбудит и уснувший сервис.');
+  } else if (awake.sleepyHost()) {
+    console.log('[awake] самопинг выключен (KEEP_AWAKE=0) — следите, чтобы сервис не уснул');
+  }
+
   server.listen(PORT, cfg.host, () => {
     const where = cfg.host === '127.0.0.1' ? 'http://localhost:' + PORT + ' (только с этого компьютера)' : ':' + PORT;
     console.log(`[consul] слушаю ${where} · режим: ${USE_WEBHOOK ? 'вебхук ' + PUBLIC_URL : 'long polling'} · подключённых ботов: ${connected.length}`);
@@ -1357,6 +1418,7 @@ async function boot() {
 function shutdown() {
   console.log('\n[consul] останавливаюсь…');
   tg.stopAllPolling();
+  awake.stop();
   store.persistNow();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 1500).unref();

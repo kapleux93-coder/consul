@@ -36,6 +36,30 @@ const PREFERRED = [
 let resolved = null;      // выбранная модель
 let resolving = null;     // промис выбора, чтобы не гонять запрос параллельно
 
+/* Ключ Groq один на весь сервис, а лимит у него общий и минутный. Когда он
+ * исчерпан, продолжать долбиться бессмысленно: каждый кабинет потратит по
+ * несколько секунд на ретраи, упрётся в тот же отказ и только продлит лимит.
+ * Поэтому первый же 429 переводит весь сервис в паузу до времени, которое
+ * назвал сам Groq: пока она идёт, к модели не ходим, а сразу зовём человека.
+ * Так отказ становится быстрым и одинаковым для всех, а не случайным. */
+let coolingUntil = 0;
+const COOL_DEFAULT_MS = 20000;
+
+/** Сколько миллисекунд осталось до конца паузы. 0 — можно работать. */
+function cooling(now = Date.now()) {
+  return coolingUntil > now ? coolingUntil - now : 0;
+}
+
+function coolDown(retryAfterSec) {
+  const ms = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+    ? Math.min(retryAfterSec * 1000, 120000) : COOL_DEFAULT_MS;
+  const until = Date.now() + ms;
+  if (until > coolingUntil) {
+    coolingUntil = until;
+    console.warn('[groq] лимит исчерпан, пауза ' + Math.round(ms / 1000) + ' с — диалоги уходят менеджерам');
+  }
+}
+
 const enabled = () => !!KEY();
 
 async function request(pathname, init, tries = 3) {
@@ -55,6 +79,9 @@ async function request(pathname, init, tries = 3) {
         const waitMs = Number.isFinite(ra) && ra > 0 ? Math.min(ra * 1000, 8000) : 400 * Math.pow(2, i);
         lastErr = new Error('groq ' + res.status + ' ' + (await res.text()).slice(0, 200));
         if (i < tries - 1) { await new Promise(r => setTimeout(r, waitMs)); continue; }
+        // Ретраи кончились, а лимит держится: значит он не мгновенный всплеск,
+        // и остальным кабинетам ходить туда сейчас незачем.
+        if (res.status === 429) coolDown(ra);
         throw lastErr;
       }
       if (!res.ok) throw new Error('groq ' + res.status + ' ' + (await res.text()).slice(0, 300));
@@ -116,6 +143,8 @@ async function model() {
  */
 async function chat(opts) {
   if (!enabled()) throw new Error('GROQ_API_KEY не задан');
+  const left = cooling();
+  if (left) throw new Error('groq 429: лимит исчерпан, до восстановления ' + Math.ceil(left / 1000) + ' с');
   const m = await model();
   const body = {
     model: m,
@@ -154,7 +183,8 @@ function extractJson(text) {
   return null;
 }
 
-module.exports = { enabled, chat, model, listModels, extractJson, PREFERRED };
+module.exports = { enabled, chat, model, listModels, extractJson, cooling, PREFERRED,
+  _resetCooling() { coolingUntil = 0; } };
 
 /* --------------------------------------------------------------- CLI */
 if (require.main === module && process.argv.includes('--list')) {

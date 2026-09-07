@@ -98,6 +98,33 @@ const stub = http.createServer((req, res) => {
     rejectJsonMode = false;
   });
 
+  await t('упёршись в лимит, сервис делает паузу вместо новых попыток', async () => {
+    // Ключ Groq один на всех. Пока лимит держится, каждый кабинет потратил бы
+    // по несколько секунд на ретраи и продлил бы его. Поэтому после
+    // исчерпанных попыток к модели не ходим совсем — сразу зовём человека.
+    g._resetCooling();
+    failTimes = 99; seen.length = 0;
+    await assert.rejects(() => g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }] }), /groq 429/);
+    const spent = seen.length;
+    assert.strictEqual(spent, 3, 'попытки исчерпаны');
+    assert.ok(g.cooling() > 0, 'сервис в паузе');
+
+    seen.length = 0;
+    await assert.rejects(() => g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }] }),
+      /лимит исчерпан/);
+    assert.strictEqual(seen.length, 0, 'во время паузы к Groq не ходим вообще');
+
+    failTimes = 0; g._resetCooling();
+    assert.strictEqual(g.cooling(), 0);
+  });
+
+  await t('короткий всплеск 429 паузу не включает', async () => {
+    g._resetCooling();
+    failTimes = 2;
+    await g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }] });
+    assert.strictEqual(g.cooling(), 0, 'ретрай удался — значит лимит не исчерпан');
+  });
+
   await t('пробрасывает ошибку сервера после исчерпания попыток', async () => {
     nextStatus = 500;
     await assert.rejects(() => g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }] }), /groq 500/);

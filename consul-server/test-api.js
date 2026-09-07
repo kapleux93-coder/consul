@@ -231,6 +231,29 @@ function makeDocx(text) {
     assert.ok(/Lumen Arc/.test(sent[0].text));
   });
 
+  await t('сообщение, пролежавшее в очереди, получает извинение перед ответом', async () => {
+    // Бесплатный хостинг усыпляет сервис; сообщения ждут в очереди Telegram.
+    // Бодрый ответ через час, будто ничего не было, читается как издёвка.
+    const w = store.getOrCreate(4242);
+    sent.length = 0;
+    await handleIncoming(w, { chatId: 556, userId: 556, text: 'Есть торшер для гостиной?',
+      firstName: 'Пётр', ts: Date.now() - 90 * 60000 });
+    assert.ok(sent.length >= 2, 'сначала извинение, потом ответ: ' + sent.length);
+    assert.ok(/Извин/i.test(sent[0].text), 'первым идёт извинение: ' + sent[0].text);
+    assert.ok(/Lumen Arc/.test(sent.map(x => x.text).join(' ')), 'по существу тоже ответили');
+    const d = store.dialog(w, 556);
+    assert.ok(d.msgs.some(m => m.r === 'ai' && /Извин/i.test(m.t)), 'извинение видно и владельцу');
+  });
+
+  await t('свежее сообщение обходится без извинений', async () => {
+    const w = store.getOrCreate(4242);
+    sent.length = 0;
+    await handleIncoming(w, { chatId: 557, userId: 557, text: 'Есть торшер для гостиной?',
+      firstName: 'Ольга', ts: Date.now() - 60000 });
+    assert.ok(sent.length, 'ответ ушёл');
+    assert.ok(!/Извин/i.test(sent[0].text), 'извиняться не за что: ' + sent[0].text);
+  });
+
   await t('запрос счёта: диалог уходит человеку и приходит уведомление', async () => {
     const w = store.getOrCreate(4242);
     sent.length = 0;
