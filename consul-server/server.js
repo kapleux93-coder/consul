@@ -356,8 +356,16 @@ async function handleIncoming(w, msg) {
     if (msg.isCommand) {
       store.pushMessage(w, msg.chatId, { r: 'user', t: msg.text, ts: msg.ts });
       if (/^\/start/.test(msg.text)) {
-        const hello = w.biz.name
-          ? `Здравствуйте! Это ${w.biz.name}. Напишите, что вас интересует — подскажу по товарам, ценам и доставке.`
+        // Здоровается тот, у кого есть имя: клиент должен понимать, с кем
+        // говорит, а не переписываться с безымянным «ботом магазина».
+        // Название в кавычках не склоняем — поэтому ставим его отдельной частью.
+        const who = String((w.ai && w.ai.name) || '').trim();
+        const firm = String(w.biz.name || '').trim();
+        const intro = who && firm ? `Меня зовут ${who}, компания «${firm}»`
+          : who ? `Меня зовут ${who}`
+          : firm ? `Это ${firm}` : '';
+        const hello = intro
+          ? `Здравствуйте! ${intro}. Напишите, что вас интересует — подскажу по товарам, ценам и доставке.`
           : 'Здравствуйте! Напишите, чем могу помочь.';
         if (await deliver(hello)) store.pushMessage(w, msg.chatId, { r: 'ai', t: hello, ts: Date.now() });
       }

@@ -24,6 +24,7 @@ function workspace() {
   const w = store.defaults('smoke');
   w.biz = { name: 'Банный двор', site: 'bannydvor.ru', about: 'Строим бани из бруса под ключ по Подмосковью.' };
   w.bot = { name: 'Банный двор', username: 'smoke' };
+  w.ai.name = 'Алексей';
   w.knowledge = [{
     id: 'k1', name: 'прайс.txt', ready: true,
     text: [
@@ -67,6 +68,12 @@ async function run() {
         ' · стадия: ' + (r.stage || '—') + ' · температура: ' + (r.temperature || '—') +
         ' · возражение: ' + (r.objection || '—') + ' · следующий шаг: ' + (r.nextStep || '—'));
   }
+
+  head('«А вы человек?» — врать нельзя, но и оправдываться незачем');
+  say('user', 'слушайте, а вы живой человек или бот?');
+  const r1 = await ai.reply(w, d, 'слушайте, а вы живой человек или бот?');
+  say('ai', r1.reply);
+  log('Бот: ' + r1.reply);
 
   head('ВОЗВРАТ ЗАМОЛЧАВШЕГО: клиент сказал «подумаю» и пропал на час');
   say('user', 'ладно, я подумаю');

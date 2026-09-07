@@ -911,7 +911,10 @@ ${topbar('AI Manager','3/5')}
 <div class="body"><div class="pad">
   ${steps(3)}
   <div class="col g8"><div class="h2">Как AI будет общаться</div>
-    <div class="sub">Четыре настройки. Остальное можно поменять позже.</div></div>
+    <div class="sub">Имя и манера. Остальное можно поменять позже.</div></div>
+  <div class="field"><div class="lbl">Имя менеджера</div>
+    <div class="inp"><input id="wizName" value="${esc(S.ai.name || '')}" placeholder="Ника" maxlength="40"></div>
+    <div class="cap2" style="padding-top:6px">Этим именем бот представится клиенту. Если спросят прямо — честно скажет, что он AI-помощник.</div></div>
   <div class="col g9"><div class="lbl">Стиль</div>
     <div class="seg" data-group="style">
       ${[['friendly','Дружелюбный'],['neutral','Нейтральный'],['formal','Формальный']].map(([k,l])=>
@@ -933,6 +936,11 @@ ${topbar('AI Manager','3/5')}
     <div class="row wrap g8" id="handoffs">${handoffChips()}</div></div>
   <div class="push" style="padding-top:18px"><button class="btn" data-act="to-team">Далее</button></div>
 </div></div>`;
+
+MOUNT.aiwiz = el => {
+  const n = $('#wizName', el);
+  if(n) n.addEventListener('input', ()=>{ S.ai.name = n.value.trim(); save(); pushAI(); });
+};
 
 function handoffChips(){
   return S.ai.handoff.map((h,i)=>`<button class="chip tag" data-act="rm-handoff" data-i="${i}">${esc(h)} ×</button>`).join('')

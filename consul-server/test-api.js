@@ -321,6 +321,33 @@ function makeDocx(text) {
     assert.strictEqual(store.dialog(w, 888).status, 'ai');
   });
 
+  await t('менеджер представляется своим именем', async () => {
+    const w = store.getOrCreate(4242);
+    w.ai.name = 'Ника'; store.save(w);
+    sent.length = 0;
+    await handleIncoming(w, { chatId: 889, userId: 889, text: '/start', firstName: 'Игорь', isCommand: true, ts: Date.now() });
+    assert.ok(/Ника/.test(sent[0].text), 'имя в приветствии: ' + sent[0].text);
+    assert.ok(/Nordlight Store/.test(sent[0].text), 'компания тоже названа');
+  });
+
+  await t('без имени приветствие остаётся связным', async () => {
+    const w = store.getOrCreate(4242);
+    const saved = w.ai.name;
+    w.ai.name = ''; store.save(w);
+    sent.length = 0;
+    await handleIncoming(w, { chatId: 890, userId: 890, text: '/start', firstName: 'Игорь', isCommand: true, ts: Date.now() });
+    assert.ok(/Nordlight Store/.test(sent[0].text), sent[0].text);
+    assert.ok(!/Меня зовут/.test(sent[0].text), 'не представляемся пустым именем: ' + sent[0].text);
+    w.ai.name = saved; store.save(w);
+  });
+
+  await t('на прямой вопрос «ты бот?» модели велено не врать', () => {
+    const w = store.getOrCreate(4242);
+    const sys = require('./ai').systemPrompt(w, []);
+    assert.ok(/бот ты или человек/.test(sys), 'правило есть в промпте');
+    assert.ok(/Никогда не утверждай, что ты живой человек/.test(sys));
+  });
+
   await t('когда Groq недоступен, диалог честно уходит человеку', async () => {
     groqOn = false;
     const w = store.getOrCreate(4242);
