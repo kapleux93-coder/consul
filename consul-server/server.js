@@ -166,7 +166,13 @@ function publicState(w) {
     ai: w.ai,
     team: w.team.map(m => ({ name: m.name, un: m.un, role: m.role, dept: m.dept, linked: !!m.tgId, code: m.tgId ? '' : m.code })),
     depts: w.depts,
-    knowledge: w.knowledge.map(k => ({ id: k.id, badge: k.badge, title: k.title, meta: k.meta, kind: k.kind, ready: k.ready, chars: (k.body || '').length })),
+    // Полный текст не отдаём: сорок материалов по 60 тысяч знаков — это
+    // мегабайты на каждое обновление состояния. Для карточки хватает начала,
+    // а целиком материал приходит по /api/knowledge/get, когда его открывают.
+    knowledge: w.knowledge.map(k => ({
+      id: k.id, badge: k.badge, title: k.title, meta: k.meta, kind: k.kind, ready: k.ready,
+      chars: (k.body || '').length, preview: String(k.body || '').slice(0, 600),
+    })),
     dialogs: Object.values(w.dialogs).sort((a, b) => b.ts - a.ts).map(publicDialog),
     counters: w.counters,
     usage: w.usage,
@@ -276,6 +282,29 @@ function noteStale(age) {
   alertAdmins('stale', 'Клиент ждал ответа ' + min + ' мин: всё это время сервис не забирал ' +
     'сообщения из Telegram.\n\nСкорее всего, инстанс уснул. Проверьте, что пинговалка ' +
     'стучится на /health хотя бы раз в 10 минут.');
+}
+
+/* ------------------------------------------------------------ база знаний */
+
+const KB_KINDS = ['text', 'doc', 'price', 'rules', 'faq', 'web'];
+const KB_BADGE = { text: 'TXT', doc: 'DOC', price: 'XLS', rules: 'DOC', faq: 'FAQ', web: 'WEB' };
+
+/** Собирает материал базы знаний из того, что прислал клиент приложения. */
+function knowledgeItem(src) {
+  const kind = KB_KINDS.includes(src.kind) ? src.kind : 'text';
+  const item = {
+    id: store.genId(),
+    kind,
+    badge: clean(src.badge, 4) || KB_BADGE[kind],
+    title: clean(src.title, 80) || 'Без названия',
+    body: String(src.body || '').slice(0, 60000),
+    meta: '',
+    ready: true,
+    addedAt: Date.now(),
+  };
+  item.meta = item.body ? `${Math.round(item.body.length / 100) / 10} тыс. знаков` : 'пусто';
+  if (!item.body) { item.ready = false; item.meta = 'черновик — нет текста'; }
+  return item;
 }
 
 /* ============================================================ приём сообщения клиента */
@@ -813,21 +842,90 @@ const routes = {
     if (w.knowledge.length >= 40) return fail(res, 400, 'Слишком много источников — удалите ненужные');
     const room = limits.checkKnowledgeRoom(w, String(body.body || '').length);
     if (!room.ok) return fail(res, 400, 'База знаний заполнена: ' + Math.round(room.limit / 1000) + ' тыс. знаков. Удалите лишнее или сократите текст.');
-    const kind = ['text', 'doc', 'price', 'rules', 'faq', 'web'].includes(body.kind) ? body.kind : 'text';
-    const item = {
-      id: store.genId(),
-      kind,
-      badge: clean(body.badge, 4) || { text: 'TXT', doc: 'DOC', price: 'XLS', rules: 'DOC', faq: 'FAQ', web: 'WEB' }[kind],
-      title: clean(body.title, 80) || 'Без названия',
-      body: String(body.body || '').slice(0, 60000),
-      meta: '',
-      ready: true,
-      addedAt: Date.now(),
-    };
-    item.meta = item.body ? `${Math.round(item.body.length / 100) / 10} тыс. знаков` : 'пусто';
-    if (!item.body) { item.ready = false; item.meta = 'черновик — нет текста'; }
+    const item = knowledgeItem(body);
     w.knowledge.push(item); store.save(w);
     ok(res, { ok: true, knowledge: publicState(w).knowledge });
+  },
+
+  /* Владелец приносит одну простыню: прайс, доставка и гарантия вперемешку.
+     Раскладываем её по разделам и показываем, что вышло, — но не сохраняем:
+     сначала он должен увидеть, правильно ли порезано. */
+  'POST /api/knowledge/split': async (req, res, body, user) => {
+    const text = String(body.text || '').trim();
+    if (text.length < 200) return fail(res, 400, 'Слишком короткий текст — добавьте его как один материал');
+    if (!groq.enabled()) return fail(res, 503, 'Разбор недоступен: модель не настроена. Добавьте текст одним материалом.');
+
+    const w = store.getOrCreate(user.id);
+    const room = limits.checkKnowledgeRoom(w, text.length);
+    if (!room.ok) return fail(res, 400, 'База знаний заполнена: ' + Math.round(room.limit / 1000) + ' тыс. знаков. Удалите лишнее.');
+
+    try {
+      const r = await ai.split(text);
+      ok(res, {
+        ok: true,
+        cut: text.length > ai.SPLIT_MAX_CHARS ? ai.SPLIT_MAX_CHARS : 0,
+        sections: r.sections.map(sec => ({ title: sec.title, kind: sec.kind, body: sec.body, chars: sec.body.length })),
+      });
+    } catch (e) {
+      console.warn('[knowledge] разбор не удался: ' + e.message);
+      noteAiFailure('split: ' + e.message);
+      fail(res, 502, 'Не получилось разложить текст. Добавьте его одним материалом — это сработает всегда.');
+    }
+  },
+
+  /* Сохраняем разделы, которые владелец проверил и, возможно, переименовал. */
+  'POST /api/knowledge/addMany': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    const list = Array.isArray(body.sections) ? body.sections.slice(0, 20) : [];
+    if (!list.length) return fail(res, 400, 'Нечего сохранять');
+    if (w.knowledge.length + list.length > 40) return fail(res, 400, 'Слишком много источников — удалите ненужные');
+
+    const total = list.reduce((n, sec) => n + String(sec.body || '').length, 0);
+    const room = limits.checkKnowledgeRoom(w, total);
+    if (!room.ok) return fail(res, 400, 'База знаний заполнена: ' + Math.round(room.limit / 1000) + ' тыс. знаков. Удалите лишнее.');
+
+    const added = [];
+    for (const sec of list) {
+      // Пустой раздел — не черновик, а мусор от разбора: молча пропускаем.
+      const item = knowledgeItem(Object.assign({}, sec, { body: String(sec.body || '').trim() }));
+      if (!item.body) continue;
+      w.knowledge.push(item); added.push(item);
+    }
+    if (!added.length) return fail(res, 400, 'Все разделы пустые');
+    store.save(w);
+    ok(res, { ok: true, added: added.length, knowledge: publicState(w).knowledge });
+  },
+
+  /* Разложили не идеально — владелец правит название, вид и сам текст. */
+  'POST /api/knowledge/update': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    const item = w.knowledge.find(k => k.id === body.id);
+    if (!item) return fail(res, 404, 'Источник не найден');
+
+    if (body.body != null) {
+      const next = String(body.body).slice(0, 60000);
+      // Считаем место с поправкой на то, что старый текст освободится.
+      const room = limits.checkKnowledgeRoom(w, Math.max(0, next.length - String(item.body || '').length));
+      if (!room.ok) return fail(res, 400, 'База знаний заполнена: ' + Math.round(room.limit / 1000) + ' тыс. знаков.');
+      item.body = next;
+    }
+    if (body.title != null) item.title = clean(body.title, 80) || item.title;
+    if (body.kind != null && KB_KINDS.includes(body.kind)) {
+      item.kind = body.kind;
+      item.badge = KB_BADGE[body.kind];
+    }
+    item.ready = !!item.body;
+    item.meta = item.body ? `${Math.round(item.body.length / 100) / 10} тыс. знаков` : 'черновик — нет текста';
+    store.save(w);
+    ok(res, { ok: true, knowledge: publicState(w).knowledge });
+  },
+
+  /* Полный текст одного материала — для экрана правки. */
+  'POST /api/knowledge/get': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    const item = w.knowledge.find(k => k.id === body.id);
+    if (!item) return fail(res, 404, 'Источник не найден');
+    ok(res, { ok: true, item: { id: item.id, title: item.title, kind: item.kind, body: item.body || '' } });
   },
 
   'POST /api/knowledge/remove': async (req, res, body, user) => {

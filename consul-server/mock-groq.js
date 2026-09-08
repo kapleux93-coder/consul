@@ -158,6 +158,8 @@ const srv = http.createServer((req, res) => {
       content = JSON.stringify({ text: 'Посчитал доставку — по области бесплатно. Прислать фото готовой 4х6?' });
     } else if (/Ты играешь ПОКУПАТЕЛЯ/.test(system)) {
       content = JSON.stringify(customerTurn(system, msgs));
+    } else if (/раскладываешь материалы компании по разделам/.test(system)) {
+      content = JSON.stringify(splitSections(question));
     } else if (/разбираешь манеру письма продавца/.test(system)) {
       content = JSON.stringify(styleProfile(question));
     } else {
@@ -174,6 +176,40 @@ const srv = http.createServer((req, res) => {
     }, 250 + Math.random() * 350);
   });
 });
+
+
+/**
+ * Заглушка разбора простыни на разделы. Настоящая модель режет по смыслу;
+ * здесь достаточно правдоподобных границ, чтобы проверить код вокруг:
+ * ищем строки-заголовки по ключевым словам и делим по ним.
+ */
+function splitSections(userText) {
+  const lines = userText.replace(/^Текст:\n/, '').split('\n').map(l => l.replace(/^\d+\t/, ''));
+  const KIND = [
+    [/доставк|оплат|возврат|гарант|рассрочк/i, 'rules', 'Доставка и оплата'],
+    [/вопрос|faq/i, 'faq', 'Частые вопросы'],
+    [/режим работы|работаем с|контакт|адрес/i, 'text', 'О компании'],
+  ];
+  // Каждая найденная тема открывает свой раздел; то, что было до первой,
+  // становится началом — обычно это как раз прайс.
+  const marks = [];
+  lines.forEach((l, i) => {
+    for (const [re, kind, title] of KIND) {
+      if (re.test(l) && !marks.some(m => m.kind === kind)) marks.push({ from: i + 1, kind, title });
+    }
+  });
+  marks.sort((a, b) => a.from - b.from);
+  if (!marks.length || marks[0].from > 1) {
+    const priced = lines.some(l => /₽|руб|\d\s*000/.test(l));
+    marks.unshift({ from: 1, kind: priced ? 'price' : 'text', title: priced ? 'Цены' : 'Материалы' });
+  }
+  return {
+    sections: marks.map((m, i) => ({
+      title: m.title, kind: m.kind, from: m.from,
+      to: i === marks.length - 1 ? lines.length : marks[i + 1].from - 1,
+    })),
+  };
+}
 
 srv.on('error', e => {
   if (e.code === 'EADDRINUSE') {

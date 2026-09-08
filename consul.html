@@ -631,7 +631,7 @@ function aiReply(input){
    Навигация
    ============================================================ */
 const SCREENS = $('#screens');
-const TABS_OF = { home:'home', inbox:'inbox', chat:null, clients:'clients', knowledge:'more', aiset:'ai', analytics:'more', channel:'more', more:'more' };
+const TABS_OF = { home:'home', inbox:'inbox', chat:null, clients:'clients', knowledge:'more', kbsplit:'more', kbedit:'more', aiset:'ai', analytics:'more', channel:'more', more:'more' };
 const ONB = ['welcome','connect','connected','business','aiwiz','team','test'];
 let stack = [];
 let current = null;
@@ -1469,6 +1469,14 @@ VIEWS.knowledge = () => {
         <div class="cap">Пока пусто. Добавьте первый источник ниже.</div></div>`}
   </div>
   <div class="col g9"><div class="lbl">Добавить</div>
+    ${NET.on ? `<button class="box" style="border-radius:18px;display:flex;align-items:center;gap:13px;width:100%;text-align:left" data-act="kb-split">
+      <div class="av warm" style="width:38px;height:38px;border-radius:12px">${I.spark('#F26722',18)}</div>
+      <div class="f1 col g4">
+        <div style="font:600 15px/1.2 var(--f)">Вставить всё сразу</div>
+        <div class="cap2">Один текст — сами разложим на прайс, доставку и остальное</div>
+      </div>
+      <div style="color:#C4C8CD;font:400 18px/1 var(--f)">›</div>
+    </button>` : ''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
       ${[['text','Текст','Написать своими словами'],['doc','Документ','PDF, DOCX, XLSX'],
          ['price','Товары и цены','Прайс или таблица'],['rules','Правила','Доставка, оплата, возврат']]
@@ -1476,6 +1484,151 @@ VIEWS.knowledge = () => {
     </div></div>
 </div></div>
 ${tabbar('more')}`;
+};
+
+/* ---------- Разбор простыни на разделы ---------- */
+/* Владелец приходит с одним куском текста, где вперемешку цены, доставка и
+ * гарантия. Раскладываем за него, но обязательно показываем результат до
+ * сохранения: резала модель, а отвечать клиентам по этим цифрам — ему. */
+
+let kbSplit = null;   // { text, sections, busy, err }
+
+const KIND_SEG = [['price','Цены'],['rules','Условия'],['faq','Вопросы'],['text','Прочее']];
+const chars = n => nf(n) + ' ' + plural(n, 'знак', 'знака', 'знаков');
+
+VIEWS.kbsplit = () => {
+  const st = kbSplit || (kbSplit = { text:'', sections:null, busy:false, err:'' });
+  if(!st.sections) return `
+${topbar('Вставить всё сразу','')}
+<div class="body"><div class="pad g16">
+  <div class="col g8"><div class="h2">Вставьте всё, что есть</div>
+    <div class="sub">Прайс, условия доставки, гарантия — можно одним куском, как есть. Разложим по разделам и покажем, что вышло.</div></div>
+  <div class="field">
+    <div class="inp"><textarea id="sp-text" rows="12" placeholder="Баня 4х6 — 320 000 ₽&#10;Баня 3х4 — 210 000 ₽&#10;&#10;Доставка по области бесплатно&#10;Предоплата 30%&#10;Гарантия 3 года">${esc(st.text)}</textarea></div>
+    <div class="hint ${st.err?'err':''}" id="sp-note">${st.err ? esc(st.err) : 'От 200 знаков. Форматирование не важно — важно, чтобы цифры были ваши.'}</div>
+  </div>
+  <div class="push" style="padding-top:16px">
+    <button class="btn" id="sp-go" ${st.busy?'disabled':''}>${st.busy?'Раскладываю…':'Разложить по разделам'}</button>
+  </div>
+</div></div>`;
+
+  const total = st.sections.reduce((n,x)=>n+x.body.length,0);
+  return `
+${topbar('Проверьте разделы','')}
+<div class="body"><div class="pad g16">
+  <div class="col g8"><div class="h2">Получилось ${st.sections.length} ${plural(st.sections.length,'раздел','раздела','разделов')}</div>
+    <div class="sub">Название и вид можно поменять, текст — поправить. Ничего не переписывали: это ваши строки, просто разложенные.</div></div>
+  <div class="col g10">
+    ${st.sections.map((sec,i)=>`
+      <div class="box plain" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div class="row g8" style="align-items:center">
+          <div class="inp f1" style="padding:0 12px"><input data-sp-title="${i}" value="${esc(sec.title)}" maxlength="60" style="font:600 15px/1 var(--f)"></div>
+          <button class="chip" style="padding:8px 11px;font-size:12px;color:#C93A3A" data-act="sp-drop" data-i="${i}">Убрать</button>
+        </div>
+        <div class="seg" style="font-size:12px">
+          ${KIND_SEG.map(([k,l])=>`<button class="${sec.kind===k?'on':''}" data-act="sp-kind" data-i="${i}" data-k="${k}">${l}</button>`).join('')}
+        </div>
+        <div class="inp" style="padding:10px 12px"><textarea data-sp-body="${i}" rows="${Math.min(10, Math.max(3, sec.body.split('\n').length))}">${esc(sec.body)}</textarea></div>
+        <div class="cap2">${chars(sec.body.length)}</div>
+      </div>`).join('')}
+  </div>
+  <div class="cap2">Всего ${chars(total)}</div>
+  <div class="push col g10" style="padding-top:16px">
+    <button class="btn" id="sp-save" ${st.busy?'disabled':''}>${st.busy?'Сохраняю…':'Сохранить в базу'}</button>
+    <button class="link" data-act="sp-again">Вернуться к тексту</button>
+  </div>
+</div></div>`;
+};
+
+MOUNT.kbsplit = el => {
+  const st = kbSplit;
+  const ta = $('#sp-text', el);
+  if(ta){
+    ta.addEventListener('input', () => { st.text = ta.value; });
+    const go = $('#sp-go', el);
+    go.addEventListener('click', async () => {
+      const text = (st.text || '').trim();
+      if(text.length < 200){
+        st.err = 'Пока мало текста: ' + text.length + ' из 200 знаков. Короткое лучше добавить одним материалом.';
+        return paint('kbsplit', false);
+      }
+      st.busy = true; st.err = ''; paint('kbsplit', false);
+      try {
+        const r = await NET.req('/api/knowledge/split', { text });
+        st.sections = r.sections; st.busy = false; haptic('ok');
+        if(r.cut) toast('Взяли первые ' + nf(r.cut) + ' знаков — остальное добавьте вторым заходом');
+        paint('kbsplit', false);
+      } catch(e){
+        st.busy = false; st.err = e.message || 'Не получилось разложить';
+        haptic('warn'); paint('kbsplit', false);
+      }
+    });
+    return;
+  }
+
+  // Правки в карточках держим в состоянии, чтобы перерисовка их не стирала.
+  el.querySelectorAll('[data-sp-title]').forEach(inp => {
+    inp.addEventListener('input', () => { st.sections[+inp.dataset.spTitle].title = inp.value; });
+  });
+  el.querySelectorAll('[data-sp-body]').forEach(t => {
+    t.addEventListener('input', () => { st.sections[+t.dataset.spBody].body = t.value; });
+  });
+  const saveBtn = $('#sp-save', el);
+  if(saveBtn) saveBtn.addEventListener('click', async () => {
+    const sections = st.sections.filter(x => x.body.trim());
+    if(!sections.length){ toast('Все разделы пустые'); return; }
+    st.busy = true; paint('kbsplit', false);
+    try {
+      const r = await NET.req('/api/knowledge/addMany', { sections });
+      S.knowledge = r.knowledge; save(); haptic('ok');
+      kbSplit = null;
+      toast('Добавлено ' + r.added + ' ' + plural(r.added,'раздел','раздела','разделов'));
+      go('knowledge', { back:true });
+    } catch(e){
+      st.busy = false; paint('kbsplit', false); netErr(e);
+    }
+  });
+};
+
+/* Экран правки одного материала: название, вид и сам текст. */
+let kbEdit = null;   // { id, title, kind, body, busy }
+
+VIEWS.kbedit = () => {
+  const k = kbEdit || {};
+  return `
+${topbar('Материал','')}
+<div class="body"><div class="pad g16">
+  <div class="field"><div class="lbl">Название</div>
+    <div class="inp"><input id="ke-title" value="${esc(k.title||'')}" maxlength="60"></div></div>
+  <div class="col g9"><div class="lbl">Вид</div>
+    <div class="seg">${KIND_SEG.map(([kk,l])=>`<button class="${k.kind===kk?'on':''}" data-act="ke-kind" data-k="${kk}">${l}</button>`).join('')}</div></div>
+  <div class="field"><div class="lbl">Текст</div>
+    <div class="inp"><textarea id="ke-body" rows="14">${esc(k.body||'')}</textarea></div>
+    <div class="hint" id="ke-note">${chars((k.body||'').length)}. AI видит их при каждом ответе.</div></div>
+  <div class="push col g10" style="padding-top:16px">
+    <button class="btn" id="ke-save" ${k.busy?'disabled':''}>${k.busy?'Сохраняю…':'Сохранить'}</button>
+    <button class="link" style="color:#C93A3A" data-act="ke-del">Удалить материал</button>
+  </div>
+</div></div>`;
+};
+
+MOUNT.kbedit = el => {
+  const k = kbEdit; if(!k) return;
+  const title = $('#ke-title', el), body = $('#ke-body', el), note = $('#ke-note', el);
+  title.addEventListener('input', () => { k.title = title.value; });
+  body.addEventListener('input', () => {
+    k.body = body.value;
+    note.textContent = chars(k.body.length) + '. AI видит их при каждом ответе.';
+  });
+  $('#ke-save', el).addEventListener('click', async () => {
+    if(!k.title.trim()){ toast('Дайте материалу название'); title.focus(); return; }
+    k.busy = true; paint('kbedit', false);
+    try {
+      const r = await NET.req('/api/knowledge/update', { id:k.id, title:k.title, kind:k.kind, body:k.body });
+      S.knowledge = r.knowledge; save(); haptic('ok');
+      kbEdit = null; toast('Сохранено'); go('knowledge', { back:true });
+    } catch(e){ k.busy = false; paint('kbedit', false); netErr(e); }
+  });
 };
 
 /* ---------- AI Settings ---------- */
@@ -2231,8 +2384,38 @@ const ACT = {
     sheet(`<div class="col g8"><div class="h5" style="font-size:19px">${esc(k.title)}</div>
         <div class="sub-s">${esc(k.meta)}</div></div>
       ${k.chars ? `<div class="box" style="border-radius:16px"><div class="cap">В базе ${nf(k.chars)} знаков — AI видит их при каждом ответе.</div></div>` : ''}
-      ${k.body ? `<div class="box" style="border-radius:16px;font:400 14px/1.5 var(--f);color:var(--ink3);max-height:200px;overflow:auto">${esc(k.body.slice(0,600))}</div>` : ''}
+      ${(k.preview || k.body) ? `<div class="box" style="border-radius:16px;font:400 14px/1.5 var(--f);color:var(--ink3);max-height:200px;overflow:auto">${esc((k.preview || k.body).slice(0,600))}</div>` : ''}
+      ${NET.on && k.id ? `<button class="btn" data-act="kb-edit" data-i="${b.dataset.i}">Изменить</button>` : ''}
       <button class="btn ghost" style="color:#C93A3A" data-act="kb-del" data-i="${b.dataset.i}">Удалить источник</button>`);
+  },
+
+  /* --- разбор простыни и правка материалов --- */
+  'kb-split': () => { kbSplit = { text:'', sections:null, busy:false, err:'' }; go('kbsplit'); },
+  'sp-kind': (b) => { kbSplit.sections[+b.dataset.i].kind = b.dataset.k; haptic('sel'); paint('kbsplit', false); },
+  'sp-drop': (b) => {
+    kbSplit.sections.splice(+b.dataset.i, 1); haptic('warn');
+    if(!kbSplit.sections.length) kbSplit.sections = null;
+    paint('kbsplit', false);
+  },
+  'sp-again': () => { kbSplit.sections = null; paint('kbsplit', false); },
+
+  'kb-edit': async (b) => {
+    const k = S.knowledge[+b.dataset.i]; if(!k) return;
+    closeSheet();
+    // В списке лежит только начало текста. Открывать редактор с обрезанным
+    // телом нельзя: сохранение стёрло бы остальное.
+    let item;
+    try { item = (await NET.req('/api/knowledge/get', { id:k.id })).item; }
+    catch(e){ return netErr(e); }
+    kbEdit = { id:item.id, title:item.title, kind:item.kind, body:item.body, busy:false };
+    go('kbedit');
+  },
+  'ke-kind': (b) => { kbEdit.kind = b.dataset.k; haptic('sel'); paint('kbedit', false); },
+  'ke-del': async () => {
+    const id = kbEdit && kbEdit.id; if(!id) return;
+    try { const r = await NET.req('/api/knowledge/remove', { id }); S.knowledge = r.knowledge; save(); }
+    catch(e){ return netErr(e); }
+    kbEdit = null; haptic('warn'); go('knowledge', { back:true });
   },
   'kb-del': async (b) => {
     const k = S.knowledge[+b.dataset.i];

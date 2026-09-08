@@ -373,6 +373,111 @@ async function customerMessage(w, history, scenarioId) {
  * Снимает манеру письма с ответов владельца.
  * Возвращает профиль, который потом уходит в системный промпт бота.
  */
+/* ============================================================ разбор простыни
+ *
+ * Владелец редко приходит с аккуратно разложенными файлами. Обычно у него есть
+ * одна простыня: прайс, условия доставки, гарантия и часы работы вперемешку.
+ * Просить его разложить это руками — значит потерять половину владельцев на
+ * первом же шаге.
+ *
+ * Модель здесь НЕ переписывает текст: она только называет разделы и указывает
+ * границы строк. Резать по этим границам будет сервер. Иначе цена, которую
+ * модель «слегка перефразировала», уедет клиенту как настоящая.
+ * ========================================================================== */
+
+/** Виды разделов, которые понимает база знаний. */
+const KINDS = ['price', 'rules', 'faq', 'text', 'doc'];
+
+/** Максимум текста за один разбор: дальше модель начинает терять середину. */
+const SPLIT_MAX_CHARS = 40000;
+
+/**
+ * Делит текст на именованные разделы.
+ * @returns {Promise<{sections:Array<{title:string,kind:string,body:string}>, usage:object, model:string}>}
+ */
+async function split(text) {
+  const src = String(text || '').replace(/\r\n?/g, '\n').trim();
+  if (!src) throw new Error('нечего разбирать — текст пустой');
+
+  const lines = src.slice(0, SPLIT_MAX_CHARS).split('\n');
+  const numbered = lines.map((l, i) => (i + 1) + '\t' + l).join('\n');
+
+  const sys = [
+    'Ты раскладываешь материалы компании по разделам, чтобы AI-менеджер быстрее находил нужное.',
+    'Тебе дают текст с пронумерованными строками. Твоя работа — назвать разделы и указать их границы.',
+    '',
+    'ГЛАВНОЕ',
+    '- Текст НЕ переписывай, не сокращай и не пересказывай. Ты возвращаешь только номера строк.',
+    '- Разделы идут подряд и не пересекаются. Первый начинается со строки 1, последний кончается последней строкой.',
+    '- Не теряй ни одной строки: между разделами не должно быть пропусков.',
+    '- Режь по смыслу: цены отдельно от условий доставки, гарантия отдельно от часов работы.',
+    '- Не дроби мелко. Обычно выходит от 2 до 8 разделов. Один связный кусок — один раздел.',
+    '- Если весь текст об одном, верни один раздел на весь текст. Это нормальный ответ.',
+    '',
+    'ВИД РАЗДЕЛА (kind)',
+    '- price — товары, услуги, цены, прайс, каталог, тарифы;',
+    '- rules — доставка, оплата, возврат, гарантия, условия работы;',
+    '- faq — вопросы клиентов и ответы на них;',
+    '- text — всё остальное: о компании, контакты, часы работы.',
+    '',
+    'НАЗВАНИЕ (title) — короткое и по делу, 2-4 слова, как назвал бы папку человек:',
+    '«Цены на бани», «Доставка и оплата», «Гарантия», «О компании». Без слова «раздел».',
+    '',
+    'Ответ — один JSON:',
+    '{"sections":[{"title":"Цены на бани","kind":"price","from":1,"to":24}]}',
+  ].join('\n');
+
+  const out = await groq.chat({
+    system: sys,
+    messages: [{ role: 'user', content: 'Текст:\n' + numbered }],
+    json: true, maxTokens: 900, temperature: 0.1,
+  });
+
+  const p = groq.extractJson(out.text);
+  const raw = (p && Array.isArray(p.sections)) ? p.sections : [];
+  const sections = sliceByLines(lines, raw);
+  if (!sections.length) throw new Error('не удалось разложить текст — добавьте его одним куском');
+  return { sections, usage: out.usage || {}, model: out.model };
+}
+
+/**
+ * Режет строки по границам, которые назвала модель, и чинит её огрехи:
+ * перехлёсты, дыры и вылеты за край. Ни одна строка не должна пропасть —
+ * пропавшая строка это потерянная цена.
+ */
+function sliceByLines(lines, raw) {
+  const total = lines.length;
+  const want = raw
+    .map(sec => ({
+      title: clean(sec && sec.title, 60) || 'Без названия',
+      kind: KINDS.includes(sec && sec.kind) ? sec.kind : 'text',
+      from: Math.round(Number(sec && sec.from)),
+      to: Math.round(Number(sec && sec.to)),
+    }))
+    .filter(s => Number.isFinite(s.from) && Number.isFinite(s.to) && s.to >= s.from)
+    .sort((a, b) => a.from - b.from);
+
+  const out = [];
+  let cursor = 1;                       // первая ещё не разобранная строка
+  for (const s of want) {
+    const from = Math.max(cursor, Math.min(s.from, total));
+    const to = Math.max(from, Math.min(s.to, total));
+    if (from > total) break;
+    // Модель начала раздел позже, чем кончился прошлый: пропущенное отдаём
+    // предыдущему разделу, а не выбрасываем.
+    if (s.from > cursor && out.length) out[out.length - 1].to = s.from - 1;
+    out.push({ title: s.title, kind: s.kind, from, to });
+    cursor = to + 1;
+  }
+  if (!out.length) out.push({ title: 'Материалы', kind: 'text', from: 1, to: total });
+  // Хвост, до которого модель не дошла, дописываем в последний раздел.
+  if (cursor <= total) out[out.length - 1].to = total;
+
+  return out
+    .map(s => ({ title: s.title, kind: s.kind, body: lines.slice(s.from - 1, s.to).join('\n').trim() }))
+    .filter(s => s.body);
+}
+
 async function analyzeStyle(w, replies) {
   const sys = [
     'Ты разбираешь манеру письма продавца, чтобы AI-ассистент отвечал клиентам так же.',
@@ -422,4 +527,5 @@ async function analyzeStyle(w, replies) {
 module.exports = {
   reply, channelPost, systemPrompt, retrieve, terms, lengthKey, questionLoop,
   customerMessage, analyzeStyle, SCENARIOS,
+  split, sliceByLines, KINDS, SPLIT_MAX_CHARS,
 };

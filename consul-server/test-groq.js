@@ -82,6 +82,9 @@ const stub = http.createServer((req, res) => {
   });
 
   await t('повторяет запрос после 429 и доводит до успеха', async () => {
+    // Состояние заглушки и пауза сервиса общие для всех тестов файла —
+    // сбрасываем явно, чтобы порядок и скорость машины ничего не решали.
+    g._resetCooling();
     failTimes = 2; seen.length = 0;
     const r = await g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }] });
     assert.ok(/Lumen Arc/.test(r.text));

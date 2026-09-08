@@ -61,6 +61,18 @@ groq.chat = async ({ system, messages }) => {
     };
   }
 
+  // Разбор простыни на разделы: возвращаем границы строк, как настоящая модель.
+  if (/раскладываешь материалы компании по разделам/.test(system)) {
+    const lines = q.replace(/^Текст:\n/, '').split('\n');
+    const at = re => lines.findIndex(l => re.test(l)) + 1;
+    const delivery = at(/Доставка/i);
+    const sections = delivery > 1
+      ? [{ title: 'Цены', kind: 'price', from: 1, to: delivery - 1 },
+         { title: 'Доставка и оплата', kind: 'rules', from: delivery, to: lines.length }]
+      : [{ title: 'Материалы', kind: 'text', from: 1, to: lines.length }];
+    return { text: JSON.stringify({ sections }), usage: { prompt_tokens: 300, completion_tokens: 40 }, model: 'test-model' };
+  }
+
   const wantsHuman = /менеджер|счёт|инн|юрлиц/i.test(q);
   const body = wantsHuman
     ? { reply: 'Подключаю менеджера.', handoff: true, reason: 'запрос счёта', stage: 'interested', interest: 'счёт на юрлицо', summary: 'Просит счёт на организацию.', contact: '' }
@@ -199,6 +211,102 @@ function makeDocx(text) {
     const r = await api('/api/knowledge/add', { kind: 'faq', title: 'FAQ', body: '' });
     const faq = r.json.knowledge.find(k => k.title === 'FAQ');
     assert.strictEqual(faq.ready, false);
+  });
+
+  console.log('api / разбор простыни на разделы');
+
+  const SHEET = [
+    'Цены на бани под ключ',
+    'Баня 4х6 — 320 000 ₽',
+    'Баня 3х4 — 210 000 ₽',
+    'Баня 6х6 с террасой — 520 000 ₽',
+    'Доставка и оплата',
+    'По Московской области бесплатно, дальше 45 ₽/км',
+    'Предоплата 30%, рассрочка на 6 месяцев',
+    'Гарантия 3 года',
+  ].join('\n') + '\n' + 'Печь Termofor входит в стоимость. '.repeat(8);
+
+  await t('простыня режется на разделы, но не сохраняется сама', async () => {
+    const before = (await api('/api/state')).json.state.knowledge.length;
+    const r = await api('/api/knowledge/split', { text: SHEET });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.json.sections.length, 2, 'цены и условия — разные разделы');
+    assert.strictEqual(r.json.sections[0].kind, 'price');
+    assert.strictEqual(r.json.sections[1].kind, 'rules');
+    const after = (await api('/api/state')).json.state.knowledge.length;
+    assert.strictEqual(after, before, 'до подтверждения владельца ничего не сохраняем');
+  });
+
+  await t('при разборе не теряется ни одной строки', async () => {
+    // Потерянная строка — это потерянная цена. Проверяем побуквенно.
+    const r = await api('/api/knowledge/split', { text: SHEET });
+    const joined = r.json.sections.map(s => s.body).join('\n');
+    const norm = t => t.replace(/\s+/g, ' ').trim();
+    assert.strictEqual(norm(joined), norm(SHEET), 'склеенные разделы совпадают с исходником');
+  });
+
+  await t('короткий текст разбирать не даём — это один материал', async () => {
+    const r = await api('/api/knowledge/split', { text: 'Баня 4х6 — 320 000 ₽' });
+    assert.strictEqual(r.status, 400);
+    assert.ok(/короткий/i.test(r.json.error), r.json.error);
+  });
+
+  await t('разделы сохраняются пачкой с названиями и видами', async () => {
+    const split = await api('/api/knowledge/split', { text: SHEET });
+    const r = await api('/api/knowledge/addMany', { sections: split.json.sections });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.json.added, 2);
+    const price = r.json.knowledge.find(k => k.title === 'Цены');
+    assert.ok(price, 'раздел с ценами в базе');
+    assert.strictEqual(price.kind, 'price');
+    assert.ok(price.ready);
+  });
+
+  await t('переименованный владельцем раздел сохраняется как он назвал', async () => {
+    const r = await api('/api/knowledge/addMany', {
+      sections: [{ title: 'Мой прайс', kind: 'price', body: 'Баня 4х6 — 320 000 ₽' }],
+    });
+    assert.ok(r.json.knowledge.some(k => k.title === 'Мой прайс'));
+  });
+
+  await t('пустые разделы не сохраняем', async () => {
+    const r = await api('/api/knowledge/addMany', { sections: [{ title: 'Пусто', kind: 'text', body: '   ' }] });
+    assert.strictEqual(r.status, 400);
+  });
+
+  console.log('api / правка материала');
+
+  await t('материал можно переименовать, сменить вид и переписать текст', async () => {
+    const st = await api('/api/state');
+    const k = st.json.state.knowledge.find(x => x.title === 'Мой прайс');
+    const r = await api('/api/knowledge/update', { id: k.id, title: 'Прайс 2026', kind: 'rules', body: 'Доставка бесплатно' });
+    assert.strictEqual(r.status, 200);
+    const upd = r.json.knowledge.find(x => x.id === k.id);
+    assert.strictEqual(upd.title, 'Прайс 2026');
+    assert.strictEqual(upd.kind, 'rules');
+    assert.ok(upd.ready);
+  });
+
+  await t('правка чужого материала не проходит', async () => {
+    const r = await api('/api/knowledge/update', { id: 'нет-такого', title: 'Х' });
+    assert.strictEqual(r.status, 404);
+  });
+
+  await t('стёртый текст делает материал черновиком, а не мусором в базе', async () => {
+    const st = await api('/api/state');
+    const k = st.json.state.knowledge.find(x => x.title === 'Прайс 2026');
+    const r = await api('/api/knowledge/update', { id: k.id, body: '' });
+    const upd = r.json.knowledge.find(x => x.id === k.id);
+    assert.strictEqual(upd.ready, false);
+    await api('/api/knowledge/remove', { id: k.id });
+  });
+
+  await t('без модели разбор честно отказывает, а не молчит', async () => {
+    groqOn = false;
+    const r = await api('/api/knowledge/split', { text: SHEET });
+    groqOn = true;
+    assert.strictEqual(r.status, 503);
+    assert.ok(/одним материалом/.test(r.json.error), r.json.error);
   });
 
   await t('тестовый чат отвечает и называет источник', async () => {
