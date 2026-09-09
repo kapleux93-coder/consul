@@ -469,6 +469,31 @@ function makeDocx(text) {
     groqOn = true;
   });
 
+  await t('приветствие платформенного бота открывает кабинет одной кнопкой', async () => {
+    // Человек приходит по ссылке из рекламы. Если сказать ему «нажмите кнопку
+    // в меню бота», половина не найдёт её — кнопка должна быть в сообщении.
+    const { server: srv } = require('./server');
+    const saved = process.env.PUBLIC_URL;
+    process.env.PUBLIC_URL = 'https://consul.example.com';
+    try {
+      sent.length = 0;
+      const marks = [];
+      const real = tg.sendMessage;
+      tg.sendMessage = async (token, chatId, text, extra) => { marks.push({ text, extra }); return { message_id: 1 }; };
+      try { await require('./server').handlePlatformUpdate({ message: {
+        chat: { id: 77, type: 'private' }, from: { id: 77, first_name: 'Пётр' }, text: '/start', date: Math.floor(Date.now() / 1000),
+      } }); } finally { tg.sendMessage = real; }
+      assert.ok(marks.length, 'бот ответил на /start');
+      const kb = marks[0].extra && marks[0].extra.reply_markup;
+      assert.ok(kb, 'к сообщению приложена клавиатура');
+      const btn = kb.inline_keyboard[0][0];
+      assert.ok(btn.web_app && btn.web_app.url, 'кнопка открывает мини-апп: ' + JSON.stringify(btn));
+      assert.ok(!/кнопка .Открыть Consul. в меню/.test(marks[0].text), 'больше не отправляем искать кнопку в меню');
+    } finally {
+      if (saved === undefined) delete process.env.PUBLIC_URL; else process.env.PUBLIC_URL = saved;
+    }
+  });
+
   await t('приглашение менеджера отдаёт рабочую ссылку', async () => {
     const r = await api('/api/team/invite', { name: 'Дмитрий Морозов', un: 'dmitry_m', dept: 'Support' });
     assert.strictEqual(r.status, 200);

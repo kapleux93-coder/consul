@@ -649,17 +649,28 @@ async function onTokenRevoked(w) {
 /* ============================================================ платформенный бот */
 
 /** Обрабатывает /start у бота Consul: приглашение менеджера по коду. */
+/** Кнопка «Открыть Consul» прямо под сообщением. Без публичного адреса её нет. */
+function openButton() {
+  // Через cfg, а не через захваченную при загрузке константу: значение,
+  // снятое один раз на старте модуля, молча остаётся старым.
+  const url = cfg.publicUrl;
+  if (!url) return undefined;
+  return { reply_markup: { inline_keyboard: [[{ text: 'Открыть Consul', web_app: { url } }]] } };
+}
+
 async function handlePlatformUpdate(update) {
   const msg = tg.parseUpdate(update);
   if (!msg || !BOT_TOKEN) return;
   const m = msg.text.match(/^\/start\s+join_([A-Za-z0-9]+)/);
   if (!m) {
-    const open = PUBLIC_URL ? '\n\nОткрыть: кнопка «Открыть Consul» в меню бота.' : '';
     if (/^\/(start|app)\b/.test(msg.text)) {
+      // Кнопка прямо в сообщении, а не «поищите в меню»: человек приходит сюда
+      // по ссылке из рекламы и должен открыть кабинет одним нажатием.
       await tg.sendMessage(BOT_TOKEN, msg.chatId,
         'Consul — AI-менеджер для вашего Telegram-бота.\n\n' +
         'Подключите своего бота, добавьте материалы о компании — и он начнёт сам отвечать клиентам, ' +
-        'а сложные диалоги будет передавать вам.' + open).catch(() => {});
+        'а сложные диалоги будет передавать вам.',
+        openButton()).catch(() => {});
     } else if (/^\/help\b/.test(msg.text)) {
       await tg.sendMessage(BOT_TOKEN, msg.chatId,
         'Как это работает\n\n' +
@@ -690,7 +701,8 @@ async function handlePlatformUpdate(update) {
   store.save(w);
   push(w.ownerId, 'state', publicState(w));
   await tg.sendMessage(BOT_TOKEN, msg.chatId,
-    `Готово, ${member.name}. Вы в команде «${w.biz.name || w.bot.name}» (${member.dept}).\nБуду присылать сюда диалоги, которые AI передаёт человеку.`).catch(() => {});
+    `Готово, ${member.name}. Вы в команде «${w.biz.name || w.bot.name}» (${member.dept}).\nБуду присылать сюда диалоги, которые AI передаёт человеку.`,
+    openButton()).catch(() => {});
   await tg.sendMessage(BOT_TOKEN, Number(w.ownerId), `✅ ${member.name} принял приглашение и получает передачи.`).catch(() => {});
 }
 
@@ -1430,6 +1442,27 @@ const server = http.createServer(async (req, res) => {
 
 /* ============================================================ старт */
 
+/** Команды и кнопка меню платформенного бота — то, что видит новый человек. */
+async function setupPlatformBot() {
+  try {
+    await tg.call(BOT_TOKEN, 'setMyCommands', { commands: [
+      { command: 'start', description: 'Открыть Consul' },
+      { command: 'app', description: 'Кабинет: диалоги, клиенты, настройки' },
+      { command: 'help', description: 'Как это работает' },
+    ] });
+    const url = cfg.publicUrl;
+    if (url) {
+      await tg.call(BOT_TOKEN, 'setChatMenuButton', {
+        menu_button: { type: 'web_app', text: 'Открыть Consul', web_app: { url } },
+      });
+    }
+    console.log('[tg] бот настроен: команды' + (url ? ' и кнопка меню на ' + url : ''));
+  } catch (e) {
+    // Не повод не запускаться: бот будет работать, просто выглядеть беднее.
+    console.warn('[tg] не смог настроить витрину бота: ' + e.message);
+  }
+}
+
 /** Подписывает обработчик апдейтов на реакцию «токен отозван». */
 function updateHandlerFor(w) {
   const fn = u => routeUpdate(w.bot.botId, u);
@@ -1496,6 +1529,11 @@ async function boot() {
     catch (e) { console.warn('[tg] вебхук платформенного бота: ' + e.message); }
   }
 
+  /* Витрина платформенного бота. Раньше это делал скрипт npm run setup, но на
+     хостинге его никто не запускает: боевой бот стоял без кнопки меню и без
+     команд, а приветствие звало нажать кнопку, которой не существовало. */
+  if (BOT_TOKEN) await setupPlatformBot();
+
   // Сбой записи в Redis — данные владельцев под угрозой, сообщаем сразу.
   store.onWriteError = e => alertAdmins('store-write', 'Не записывается хранилище: ' + e.message +
     '\nИзменения держатся в памяти и пропадут при перезапуске.');
@@ -1549,4 +1587,4 @@ process.on('SIGTERM', shutdown);
 
 if (require.main === module) boot();
 
-module.exports = { server, verifyInitData, publicState, handleIncoming, htmlToText, routes, boot, sweepFollowUps };
+module.exports = { server, verifyInitData, publicState, handleIncoming, handlePlatformUpdate, htmlToText, routes, boot, sweepFollowUps };
