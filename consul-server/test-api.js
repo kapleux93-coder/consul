@@ -824,6 +824,12 @@ function makeDocx(text) {
     assert.ok(/по вашему поручению/.test(terms), 'в условиях есть обязательства обработчика');
   });
 
+  await t('политика объясняет, что доступ к боту отзывается одной командой', async () => {
+    const html = require('./legal').privacy();
+    assert.ok(/\/revoke/.test(html), 'способ отозвать доступ назван');
+    assert.ok(/удаляется отдельно/.test(html), 'и сказано, что отзыв не стирает переписку');
+  });
+
   await t('регион серверов попадает на страницу, когда задан', async () => {
     process.env.DATA_REGION = 'Франкфурт, Германия';
     try { assert.ok(require('./legal').privacy().includes('Франкфурт')); }

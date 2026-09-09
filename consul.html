@@ -777,26 +777,28 @@ ${topbar('Connect your bot','1/5')}
 <div class="body"><div class="pad g20">
   ${steps(1)}
   <div class="col g9">
-    <div class="h2">Подключите бота</div>
-    <div class="sub">Вставьте токен из BotFather — мы проверим доступ и заберём аватар и название.</div>
+    <div class="h2">Заведите нового бота</div>
+    <div class="sub">Не подключайте бота, который у вас уже работает. Создайте отдельного — это пять минут, и вы ничем не рискуете.</div>
   </div>
+  <button class="box" style="display:flex;align-items:center;gap:13px;width:100%;text-align:left" data-act="nobot">
+    <div class="av warm" style="width:38px;height:38px;border-radius:12px">${I.msg(null,18)}</div>
+    <div class="f1 col g4">
+      <div style="font:600 15px/1.2 var(--f)">Создать бота в @BotFather</div>
+      <div class="cap2">Четыре шага, покажем какие</div>
+    </div>
+    <div style="color:#C4C8CD;font:400 18px/1 var(--f)">›</div>
+  </button>
   <div class="field">
-    <div class="lbl">Bot token</div>
+    <div class="lbl">Токен нового бота</div>
     <div class="inp mono" id="tokwrap"><input id="tok" inputmode="text" autocomplete="off" spellcheck="false" placeholder="1234567890:AAF-xxxxxxxxxxxx" value="${esc(S.bot.token)}"></div>
     <div class="hint" id="tokhint">Токен хранится в зашифрованном виде и виден только вам.</div>
   </div>
-  <div class="box" style="display:flex;align-items:center;gap:13px" data-act="botfather">
-    <div class="av warm" style="width:38px;height:38px;border-radius:12px">${I.msg(null,18)}</div>
-    <div class="f1 col g4">
-      <div style="font:500 14px/1.35 var(--f);color:var(--ink3)">Токен даёт @BotFather в Telegram</div>
-      <div class="cap2">Откроем и покажем, что нажать</div>
-    </div>
-    <div class="a15">Открыть</div>
+  <div class="box warm" style="border-radius:16px">
+    <div class="cap">Доступ можно отозвать в любой момент: команда <b>/revoke</b> в @BotFather выдаёт новый токен, и мы мгновенно теряем связь с ботом. Сохранённую переписку удаляет кнопка «Удалить кабинет».</div>
   </div>
   <div id="found"></div>
   <div class="push col g10">
     <button class="btn" id="connectBtn" data-act="connect">Подключить бота</button>
-    <button class="link" data-act="nobot">У меня ещё нет бота</button>
   </div>
 </div></div>`;
 
@@ -2156,12 +2158,13 @@ const ACT = {
   },
   nobot: () => {
     sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Создать бота — 4 шага</div>
-        <div class="sub-s">В Telegram откройте @BotFather и пришлите сюда токен.</div></div>
+        <div class="sub-s">Заводите нового, специально под Consul. У свежего бота нет ни подписчиков, ни истории — потерять нечего.</div></div>
       <div class="list plain" style="padding:0 16px">
         ${['Откройте @BotFather','Отправьте команду /newbot','Придумайте имя и @username','Скопируйте токен и вставьте здесь']
           .map((t,i)=>`<div class="row g12"><div class="av warm" style="width:28px;height:28px;border-radius:9px;font-size:12px">${i+1}</div>
           <div style="font:400 14px/1.4 var(--f)">${t}</div></div>`).join('')}
       </div>
+      <div class="box warm" style="border-radius:16px"><div class="cap">Передумаете — отправьте <b>/revoke</b> тому же @BotFather. Токен сменится, и доступ у нас пропадёт сразу же.</div></div>
       <button class="btn" data-act="botfather">Открыть @BotFather</button>`);
   },
   rebot: () => {
