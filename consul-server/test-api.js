@@ -783,6 +783,90 @@ function makeDocx(text) {
     }
   });
 
+  await t('у юрлица на странице видны реквизиты, а не одно название', async () => {
+    // «ООО „Ромашка“» в реестре десятки — по одному названию непонятно,
+    // к кому идти. Реквизиты задаются отдельной строкой и необязательны.
+    process.env.OPERATOR_NAME = 'ООО «Тест»';
+    process.env.OPERATOR_EMAIL = 'test@example.com';
+    process.env.OPERATOR_DETAILS = 'ИНН 7701234567, Москва, ул. Примерная, 1';
+    try {
+      const html = require('./legal').privacy();
+      assert.ok(html.includes('ООО «Тест»'), 'название есть');
+      assert.ok(html.includes('ИНН 7701234567'), 'реквизиты есть');
+      assert.ok(html.includes('ООО «Тест»', html.indexOf('class="foot"')) || /foot[\s\S]*Тест/.test(html),
+        'оператор подписан и в подвале');
+    } finally {
+      delete process.env.OPERATOR_NAME; delete process.env.OPERATOR_EMAIL; delete process.env.OPERATOR_DETAILS;
+    }
+  });
+
+  await t('без реквизитов страница остаётся связной', async () => {
+    process.env.OPERATOR_NAME = 'Иванов Иван Иванович';
+    process.env.OPERATOR_EMAIL = 'test@example.com';
+    try {
+      const html = require('./legal').privacy();
+      assert.ok(html.includes('Иванов Иван Иванович'));
+      assert.ok(!/<br>\s*<br>/.test(html), 'нет пустой строки на месте реквизитов');
+    } finally {
+      delete process.env.OPERATOR_NAME; delete process.env.OPERATOR_EMAIL;
+    }
+  });
+
+  await t('политика говорит про роли, основания и передачу за пределы ЕЭЗ', async () => {
+    // Европейскому оператору мало «кто отвечает и куда писать»: нужны роли
+    // контролёра и обработчика, основания обработки и вывоз данных в США.
+    const html = require('./legal').privacy();
+    for (const must of ['контролёр', 'обработчик', 'Исполнение договора',
+                        'за пределы ЕЭЗ', 'надзорный орган', 'Скачать мои данные']) {
+      assert.ok(html.includes(must), 'в политике нет «' + must + '»');
+    }
+    const terms = require('./legal').terms();
+    assert.ok(/по вашему поручению/.test(terms), 'в условиях есть обязательства обработчика');
+  });
+
+  await t('регион серверов попадает на страницу, когда задан', async () => {
+    process.env.DATA_REGION = 'Франкфурт, Германия';
+    try { assert.ok(require('./legal').privacy().includes('Франкфурт')); }
+    finally { delete process.env.DATA_REGION; }
+  });
+
+  await t('выгрузка отдаёт данные один раз и по короткой ссылке', async () => {
+    // Тест самодостаточен: к этому моменту кабинет мог быть удалён и создан
+    // заново, поэтому сами кладём в него переписку и материал.
+    const w = store.getOrCreate(4242);
+    await handleIncoming(w, { chatId: 4001, userId: 4001, text: 'Есть торшер для гостиной?',
+      firstName: 'Экспорт', ts: Date.now() });
+    await api('/api/knowledge/add', { kind: 'price', title: 'Прайс для выгрузки', body: 'Торшер — 12 400 ₽' });
+
+    const r = await api('/api/account/export');
+    assert.strictEqual(r.status, 200);
+    assert.ok(/\/export\/[0-9a-f]{48}$/.test(r.json.url), 'ссылка одноразовая: ' + r.json.url);
+
+    const res = await fetch(base + new URL(r.json.url).pathname);
+    assert.strictEqual(res.status, 200);
+    assert.ok(/attachment/.test(res.headers.get('content-disposition') || ''), 'файл скачивается, а не открывается');
+    const data = await res.json();
+    assert.ok(Array.isArray(data.диалоги), 'диалоги выгружены');
+    assert.ok(data.диалоги.some(d => (d.сообщения || []).length), 'переписка внутри');
+    assert.ok(Array.isArray(data.базаЗнаний), 'база знаний выгружена');
+
+    const again = await fetch(base + new URL(r.json.url).pathname);
+    assert.strictEqual(again.status, 410, 'вторая попытка по той же ссылке не проходит');
+  });
+
+  await t('в выгрузке нет токена бота', async () => {
+    // Файл уедет в мессенджер и осядет в загрузках. Токену там не место.
+    const r = await api('/api/account/export');
+    const raw = await (await fetch(base + new URL(r.json.url).pathname)).text();
+    assert.ok(!/tokenEnc|webhookSecret/.test(raw), 'секреты не выгружаем');
+    assert.ok(!/PLATFORM-TEST-TOKEN|\d{6,}:[A-Za-z0-9_-]{20,}/.test(raw), 'токен в открытом виде тоже');
+  });
+
+  await t('чужая ссылка на выгрузку не работает', async () => {
+    const res = await fetch(base + '/export/' + 'ff'.repeat(24));
+    assert.strictEqual(res.status, 410);
+  });
+
   await t('своя страница перекрывает встроенную', async () => {
     process.env.PRIVACY_URL = 'https://example.com/policy';
     try { assert.strictEqual(require('./config').urls.privacy, 'https://example.com/policy'); }

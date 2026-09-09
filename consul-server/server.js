@@ -284,6 +284,47 @@ function noteStale(age) {
     'стучится на /health хотя бы раз в 10 минут.');
 }
 
+/* ------------------------------------------------------------ выгрузка данных */
+
+/* Право забрать свои данные из сервиса требует, чтобы их можно было именно
+ * СКАЧАТЬ файлом. Отдать их прямо в ответе API мало: мини-апп живёт в вебвью
+ * Telegram, где сохранение файла работает через раз. Поэтому выдаём короткую
+ * одноразовую ссылку и открываем её во внешнем браузере — там скачивание
+ * обычное. Ссылка живёт десять минут и сгорает после первого скачивания:
+ * выгрузка содержит всю переписку клиентов, ей нельзя валяться в истории. */
+const exportLinks = new Map();   // токен → { ownerId, at }
+const EXPORT_TTL = 10 * 60 * 1000;
+
+function newExportLink(ownerId) {
+  for (const [t, v] of exportLinks) if (Date.now() - v.at > EXPORT_TTL) exportLinks.delete(t);
+  const token = crypto.randomBytes(24).toString('hex');
+  exportLinks.set(token, { ownerId: String(ownerId), at: Date.now() });
+  return token;
+}
+
+/** Всё, что сервис хранит о кабинете. Без секретов: токен бота не отдаём даже владельцу. */
+function exportData(w) {
+  return {
+    exportedAt: new Date().toISOString(),
+    сервис: 'Consul',
+    кабинет: { id: w.ownerId, создан: new Date(w.createdAt || 0).toISOString(), онбординг: w.onboarded },
+    // Токен бота и секрет вебхука не выгружаем: они нужны только серверу, а в
+    // файле, который уедет в мессенджер, им точно не место.
+    бот: { имя: w.bot.name, username: w.bot.username, botId: w.bot.botId, подключён: w.bot.connected },
+    компания: w.biz,
+    настройки: w.ai,
+    команда: w.team.map(m => ({ имя: m.name, un: m.un, роль: m.role, отдел: m.dept })),
+    базаЗнаний: w.knowledge.map(k => ({ название: k.title, вид: k.kind, добавлен: new Date(k.addedAt || 0).toISOString(), текст: k.body })),
+    диалоги: Object.values(w.dialogs || {}).map(d => ({
+      клиент: { имя: d.full, un: d.un, телефон: d.phone, chatId: d.chatId },
+      статус: d.status, стадия: d.stage, интерес: d.interest, заметка: d.note, сводка: d.summary,
+      сообщения: (d.msgs || []).map(m => ({ кто: m.r, время: new Date(m.ts || 0).toISOString(), текст: m.t })),
+    })),
+    счётчики: w.counters,
+    расход: w.usage,
+  };
+}
+
 /* ------------------------------------------------------------ база знаний */
 
 const KB_KINDS = ['text', 'doc', 'price', 'rules', 'faq', 'web'];
@@ -1185,6 +1226,21 @@ const routes = {
     ok(res, { ok: true, state: publicState(w) });
   },
 
+  /* Выгрузка: владелец забирает всё, что сервис о нём хранит. */
+  'POST /api/account/export': async (req, res, body, user) => {
+    const w = store.get(user.id);
+    if (!w) return fail(res, 404, 'Кабинет пуст');
+    const token = newExportLink(user.id);
+    const base = cfg.publicUrl || ('http://' + (req.headers.host || 'localhost'));
+    ok(res, {
+      ok: true,
+      url: base + '/export/' + token,
+      dialogs: Object.keys(w.dialogs || {}).length,
+      knowledge: w.knowledge.length,
+      minutes: Math.round(EXPORT_TTL / 60000),
+    });
+  },
+
   /* ---- удаление кабинета: владелец забирает свои данные из сервиса ---- */
   'POST /api/account/delete': async (req, res, body, user) => {
     const w = store.get(user.id);
@@ -1428,6 +1484,27 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && (pathname === '/' || pathname === '/consul.html' || pathname === '/index.html')) return serveHtml(res);
+
+  /* --- выгрузка по одноразовой ссылке --- */
+  if (req.method === 'GET' && pathname.startsWith('/export/')) {
+    const token = pathname.slice(8);
+    const link = exportLinks.get(token);
+    exportLinks.delete(token);                       // одноразовая, даже если протухла
+    if (!link || Date.now() - link.at > EXPORT_TTL) {
+      res.writeHead(410, { 'content-type': 'text/plain; charset=utf-8' });
+      return res.end('Ссылка на выгрузку устарела или уже использована. Запросите новую в приложении.');
+    }
+    const w = store.get(link.ownerId);
+    if (!w) { res.writeHead(404); return res.end(); }
+    const json = Buffer.from(JSON.stringify(exportData(w), null, 2), 'utf8');
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': 'attachment; filename="consul-export.json"',
+      'content-length': json.length,
+      'cache-control': 'no-store',
+    });
+    return res.end(json);
+  }
 
   /* --- политика данных и условия: на том же домене, что и мини-апп --- */
   if (req.method === 'GET' && (pathname === '/privacy' || pathname === '/terms')) {

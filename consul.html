@@ -2041,7 +2041,8 @@ VIEWS.more = () => `
   </div>` : ''}
   <div class="push col g4" style="padding-top:16px">
     <button class="link" data-act="restart">Пройти настройку заново</button>
-    ${NET.on ? `<button class="link" style="color:#C93A3A" data-act="delete-account">Удалить кабинет и все данные</button>` : ''}
+    ${NET.on ? `<button class="link" data-act="export-account">Скачать мои данные</button>
+    <button class="link" style="color:#C93A3A" data-act="delete-account">Удалить кабинет и все данные</button>` : ''}
   </div>
 </div></div>
 ${tabbar('more')}`;
@@ -2587,6 +2588,18 @@ const ACT = {
     const url = b.dataset.url;
     if(TG && TG.openLink) TG.openLink(url); else window.open(url, '_blank');
   },
+  'export-account': async () => {
+    let r;
+    try { r = await NET.req('/api/account/export', {}); } catch(e){ return netErr(e); }
+    // Ссылку открываем во внешнем браузере: внутри Telegram скачивание файла
+    // работает через раз, а снаружи это обычная загрузка.
+    sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Ваши данные</div>
+        <div class="sub-s">Один файл: компания, настройки, вся база знаний (${r.knowledge}) и все диалоги с перепиской (${r.dialogs}). Токен бота в выгрузку не попадает.</div></div>
+      <div class="box warm" style="border-radius:16px"><div class="cap">Ссылка работает ${r.minutes} минут и только один раз — в файле переписка ваших клиентов.</div></div>
+      <button class="btn" data-act="ext" data-url="${esc(r.url)}">Скачать файл</button>
+      <button class="link" data-act="close-sheet">Отмена</button>`);
+  },
+
   'delete-account': () => {
     const d = S.dialogs.length, k = S.knowledge.length;
     sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Удалить кабинет?</div>
