@@ -145,6 +145,59 @@ function persist() {
 /** Сброс без ожидания таймера (при завершении процесса и в тестах). */
 function persistNow() { clearTimeout(saveTimer); return flush(); }
 
+/* ------------------------------------------------------------ копии в Redis */
+
+/* Вся база лежит в одном ключе и перезаписывается целиком. Одна кривая запись,
+ * один промах с ключом — и у всех владельцев разом пропадают подключённые боты,
+ * базы знаний и переписка, без единого шанса откатиться. Локальные копии
+ * (backup.js) на бесплатном хостинге не спасают: диска там нет.
+ *
+ * Поэтому раз в сутки складываем снимок в отдельный ключ с датой и держим
+ * последние KEEP штук. Хранилище то же самое, но потерять его целиком уже
+ * сложнее, чем испортить одну запись. */
+const SNAP_KEEP = Number(process.env.BACKUP_KEEP) || 5;
+const SNAP_PREFIX = REDIS_KEY + ':backup:';
+
+/** Предел на снимок: бесплатный Upstash даёт 256 МБ на всё. */
+const SNAP_MAX_BYTES = Number(process.env.BACKUP_MAX_BYTES) || 20 * 1024 * 1024;
+
+/**
+ * Складывает снимок базы в отдельный ключ и подчищает старые.
+ * @returns {Promise<{ok:boolean, key?:string, bytes?:number, reason?:string}>}
+ */
+async function snapshot(now = Date.now()) {
+  if (!useRedis) return { ok: false, reason: 'копии в Redis нужны только с Redis' };
+  if (!db || !Object.keys(db.workspaces || {}).length) {
+    // Пустую базу копировать нельзя: снимок вытеснит хорошие.
+    return { ok: false, reason: 'база пуста — копию не делаю' };
+  }
+  const json = JSON.stringify(db);
+  if (json.length > SNAP_MAX_BYTES) {
+    return { ok: false, reason: 'база больше ' + Math.round(SNAP_MAX_BYTES / 1048576) + ' МБ — копия не влезет' };
+  }
+
+  const key = SNAP_PREFIX + new Date(now).toISOString().slice(0, 10);
+  await redis(['SET', key, json]);
+
+  // Чистим лишние: имена с датой сортируются как строки, поэтому просто
+  // отрезаем всё, кроме последних KEEP.
+  try {
+    const keys = (await redis(['KEYS', SNAP_PREFIX + '*'])) || [];
+    const old = keys.sort().slice(0, Math.max(0, keys.length - SNAP_KEEP));
+    for (const k of old) await redis(['DEL', k]);
+  } catch (e) {
+    console.warn('[store] не смог подчистить старые копии: ' + e.message);
+  }
+  return { ok: true, key, bytes: json.length };
+}
+
+/** Какие копии сейчас есть — для диагностики и восстановления вручную. */
+async function snapshots() {
+  if (!useRedis) return [];
+  const keys = (await redis(['KEYS', SNAP_PREFIX + '*'])) || [];
+  return keys.sort().map(k => k.slice(SNAP_PREFIX.length));
+}
+
 /* ------------------------------------------------------------ workspace */
 
 function defaults(ownerId) {
@@ -303,6 +356,7 @@ module.exports = {
   dialog, upsertDialog, pushMessage,
   hours, addMinutes,
   persist, persistNow, genId, initRemote,
+  snapshot, snapshots,
   backend: useRedis ? 'redis' : 'file',
   _file: FILE,
   _reset() { db = empty(); persistNow(); },

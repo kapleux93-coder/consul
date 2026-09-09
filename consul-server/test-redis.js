@@ -31,6 +31,16 @@ const stub = http.createServer((req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ result: 'OK' }));
     }
+    if (op === 'KEYS') {
+      const re = new RegExp('^' + String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*') + '$');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ result: Object.keys(store).filter(k => re.test(k)) }));
+    }
+    if (op === 'DEL') {
+      delete store[key];
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ result: 1 }));
+    }
     res.writeHead(400); res.end('unknown');
   });
 });
@@ -142,6 +152,69 @@ function freshStore() {
     assert.strictEqual(s.remove(777), true);
     await sleep(100);
     assert.deepStrictEqual(JSON.parse(store['consul:test']).workspaces, {});
+  });
+
+  console.log('redis / резервные копии');
+
+  await t('снимок ложится отдельным ключом с датой', async () => {
+    const s = freshStore();
+    await s.initRemote();
+    const w = s.getOrCreate(555); w.biz.name = 'Банный двор'; s.save(w);
+    await s.persistNow();
+
+    const r = await s.snapshot(Date.parse('2026-09-09T10:00:00Z'));
+    assert.strictEqual(r.ok, true, r.reason);
+    assert.strictEqual(r.key, 'consul:test:backup:2026-09-09');
+    const snap = JSON.parse(store[r.key]);
+    assert.strictEqual(snap.workspaces['555'].biz.name, 'Банный двор', 'данные внутри копии');
+    assert.ok(store['consul:test'], 'основной ключ на месте');
+  });
+
+  await t('пустую базу не копируем — иначе она вытеснит хорошие копии', async () => {
+    const s = freshStore();
+    await s.initRemote();
+    s._reset();
+    const r = await s.snapshot();
+    assert.strictEqual(r.ok, false);
+    assert.ok(/пуста/.test(r.reason), r.reason);
+  });
+
+  await t('старые копии подчищаются, свежие остаются', async () => {
+    for (const k of Object.keys(store)) if (k.includes(':backup:')) delete store[k];
+    const s = freshStore();
+    await s.initRemote();
+    const w = s.getOrCreate(556); s.save(w);
+    // Семь дней подряд при KEEP=5.
+    for (let d = 1; d <= 7; d++) {
+      await s.snapshot(Date.parse('2026-09-0' + d + 'T10:00:00Z'));
+    }
+    const list = await s.snapshots();
+    assert.strictEqual(list.length, 5, 'храним ровно последние пять: ' + list.join(', '));
+    assert.strictEqual(list[list.length - 1], '2026-09-07', 'самая свежая на месте');
+    assert.ok(!list.includes('2026-09-01'), 'самая старая удалена');
+  });
+
+  await t('слишком большая база копию не роняет, а честно отказывает', async () => {
+    const s = freshStore();
+    await s.initRemote();
+    const w = s.getOrCreate(557);
+    w.biz.about = 'x'.repeat(200);
+    s.save(w);
+    await s.persistNow();          // свежий экземпляр читает из Redis, а не из памяти
+    const saved = process.env.BACKUP_MAX_BYTES;
+    process.env.BACKUP_MAX_BYTES = '50';
+    try {
+      // Предел читается при загрузке модуля, поэтому берём свежий экземпляр.
+      delete require.cache[require.resolve('./store')];
+      const s2 = require('./store');
+      await s2.initRemote();
+      const r = await s2.snapshot();
+      assert.strictEqual(r.ok, false);
+      assert.ok(/не влезет/.test(r.reason), r.reason);
+    } finally {
+      if (saved === undefined) delete process.env.BACKUP_MAX_BYTES; else process.env.BACKUP_MAX_BYTES = saved;
+      delete require.cache[require.resolve('./store')];
+    }
   });
 
   stub.close();

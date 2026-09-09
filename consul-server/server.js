@@ -1619,9 +1619,30 @@ async function boot() {
     Number(process.env.FOLLOWUP_SWEEP_MS) || 5 * 60 * 1000);
   if (sweep.unref) sweep.unref();
 
-  // Копии на диск имеют смысл только когда там же лежит и сама база.
-  if (store.backend === 'file') backup.schedule(store._file);
-  else console.log('[backup] база во внешнем Redis — локальные копии не делаю');
+  // Копии на диск имеют смысл только когда там же лежит и сама база. С Redis
+  // диска нет, поэтому снимок кладём туда же отдельным ключом с датой.
+  if (store.backend === 'file') {
+    backup.schedule(store._file);
+  } else {
+    const snap = async () => {
+      try {
+        const r = await store.snapshot();
+        if (r.ok) console.log('[backup] снимок ' + r.key + ' (' + Math.round(r.bytes / 1024) + ' КБ)');
+        else console.log('[backup] ' + r.reason);
+      } catch (e) {
+        console.error('[backup] снимок не удался: ' + e.message);
+        alertAdmins('backup', 'Не получается сделать резервную копию базы: ' + e.message +
+          '\n\nСейчас откатиться будет не с чего.');
+      }
+    };
+    // Первый — не сразу: дать боту подняться и не тратить время старта.
+    const first = setTimeout(snap, Number(process.env.BACKUP_FIRST_MINUTES || 10) * 60000);
+    if (first.unref) first.unref();
+    const every = setInterval(snap, (Number(process.env.BACKUP_EVERY_HOURS) || 24) * 3600 * 1000);
+    if (every.unref) every.unref();
+    console.log('[backup] база в Redis — снимки туда же, храню последние ' +
+      (Number(process.env.BACKUP_KEEP) || 5));
+  }
 
   /* Бесплатный хостинг усыпляет инстанс, а спящий сервис не забирает
      сообщения из Telegram. Стучимся к себе сами — это не отменяет внешнюю
