@@ -32,7 +32,24 @@ let saveTimer = null;
 let writing = false;      // идёт запись в Redis
 let dirtyAgain = false;   // за время записи данные снова изменились
 
-function empty() { return { workspaces: {}, byBotId: {}, byWebhookSecret: {}, seq: 1 }; }
+function empty() {
+  return {
+    workspaces: {}, byBotId: {}, byWebhookSecret: {}, seq: 1,
+    // Сколько минут сервис проработал в текущем месяце. Нужно там, где хостинг
+    // даёт ограниченные часы: счётчик переживает перезапуск, а uptime — нет.
+    hours: { month: '', minutes: 0 },
+  };
+}
+
+/** Прочитать и записать счётчик часов работы. */
+function hours() { return load().hours; }
+function addMinutes(month, minutes) {
+  const h = load().hours;
+  if (h.month !== month) { h.month = month; h.minutes = 0; }
+  h.minutes += minutes;
+  persist();
+  return h.minutes;
+}
 
 function normalize(obj) {
   const d = obj && typeof obj === 'object' ? obj : empty();
@@ -284,6 +301,7 @@ module.exports = {
   get, getOrCreate, save, defaults, remove,
   findByBotId, findByWebhookSecret, bindBot, unbindBot, allConnected, allWorkspaces,
   dialog, upsertDialog, pushMessage,
+  hours, addMinutes,
   persist, persistNow, genId, initRemote,
   backend: useRedis ? 'redis' : 'file',
   _file: FILE,

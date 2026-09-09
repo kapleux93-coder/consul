@@ -1366,7 +1366,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/health') {
-    return ok(res, { ok: true, uptime: Math.round(process.uptime()), groq: groq.enabled(), mode: USE_WEBHOOK ? 'webhook' : 'polling', bots: tg.pollers.size });
+    // hours — часы работы за месяц: на бесплатном хостинге их 750, и знать,
+    // сколько осталось, полезнее, чем uptime одного процесса.
+    return ok(res, {
+      ok: true, uptime: Math.round(process.uptime()), groq: groq.enabled(),
+      mode: USE_WEBHOOK ? 'webhook' : 'polling', bots: tg.pollers.size,
+      hours: Math.round(awake.usedHours()),
+    });
   }
 
   /* --- SSE --- */
@@ -1506,10 +1512,19 @@ async function boot() {
      сообщения из Telegram. Стучимся к себе сами — это не отменяет внешнюю
      пинговалку (уснувший процесс себя не разбудит), но закрывает случай,
      когда её забыли включить. */
-  const ka = awake.start(cfg.publicUrl);
+  const ka = awake.start(cfg.publicUrl, {
+    store,
+    onBudget: (used, left) => alertAdmins('hours',
+      'Бесплатные часы Render почти кончились: ' + used + ' из 750, осталось ' + left + '.\n\n' +
+      'Перестал будить сервис — теперь он засыпает между разговорами, и ответы клиентам ' +
+      'будут приходить с задержкой. Иначе Render остановил бы его до первого числа.\n\n' +
+      'Лечится переводом сервиса на платный compute-план ($7/мес): там нет ни сна, ни лимита часов.'),
+  });
   if (ka.on) {
     console.log('[awake] держу сервис бодрым: стучусь к себе раз в ' + ka.minutes + ' мин');
-    console.log('        это ~720 часов инстанса в месяц из 750 бесплатных — запаса нет.');
+    console.log('        часов в этом месяце: ' + Math.round(ka.usedHours) + ' из ' + ka.budget +
+      ' (Render даёт 750 на воркспейс, круглосуточно уходит 720–744).');
+    console.log('        У черты перестану будить себя сам — сервис начнёт засыпать, но доживёт до конца месяца.');
     console.log('        Внешняя пинговалка на /health надёжнее: она разбудит и уснувший сервис.');
   } else if (awake.sleepyHost()) {
     console.log('[awake] самопинг выключен (KEEP_AWAKE=0) — следите, чтобы сервис не уснул');

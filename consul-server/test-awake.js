@@ -112,6 +112,76 @@ function withEnv(vars, fn) {
     });
   });
 
+  console.log('awake / бесплатные часы');
+
+  /** Хранилище-заглушка: считает минуты так же, как настоящее. */
+  function fakeStore(month = '', minutes = 0) {
+    const h = { month, minutes };
+    return {
+      hours: () => h,
+      addMinutes: (m, add) => { if (h.month !== m) { h.month = m; h.minutes = 0; } h.minutes += add; return h.minutes; },
+    };
+  }
+
+  await t('обычный тик считает время и стучится', async () => {
+    hits.length = 0;
+    const st = fakeStore(awake.month(), 0);
+    withEnv({ RENDER: 'true' }, () => awake.start(base, { store: st }));
+    await new Promise(r => setTimeout(r, 60));
+    await awake.tick(base, 10);
+    awake.stop();
+    assert.strictEqual(hits.length, 1, 'стук был');
+    assert.ok(st.hours().minutes > 0, 'записано время, реально прошедшее с прошлого тика');
+  });
+
+  await t('у последней черты перестаём будить себя, но не падаем', async () => {
+    // Render останавливает сервис, когда 750 часов кончились. Лучше засыпать
+    // между разговорами, чем быть выключенным до первого числа.
+    hits.length = 0;
+    const st = fakeStore(awake.month(), awake.BUDGET_HOURS * 60);
+    let told = null;
+    withEnv({ RENDER: 'true' }, () => awake.start(base, { store: st, onBudget: (u, l) => { told = { u, l }; } }));
+    await awake.tick(base, 10);
+    await awake.tick(base, 10);
+    awake.stop();
+    assert.strictEqual(hits.length, 0, 'к себе больше не стучимся');
+    assert.ok(told, 'владельца сервиса предупредили');
+    assert.ok(told.u >= awake.BUDGET_HOURS, 'в сообщении настоящие часы: ' + JSON.stringify(told));
+  });
+
+  await t('предупреждаем один раз, а не каждые десять минут', async () => {
+    const st = fakeStore(awake.month(), awake.BUDGET_HOURS * 60);
+    let times = 0;
+    withEnv({ RENDER: 'true' }, () => awake.start(base, { store: st, onBudget: () => times++ }));
+    await awake.tick(base, 10);
+    await awake.tick(base, 10);
+    await awake.tick(base, 10);
+    awake.stop();
+    assert.strictEqual(times, 1);
+  });
+
+  await t('новый месяц обнуляет счётчик', async () => {
+    hits.length = 0;
+    const st = fakeStore('2026-08', awake.BUDGET_HOURS * 60);   // прошлый месяц выбран весь
+    withEnv({ RENDER: 'true' }, () => awake.start(base, { store: st }));
+    await awake.tick(base, 10);
+    awake.stop();
+    assert.strictEqual(hits.length, 1, 'в новом месяце снова работаем');
+    assert.strictEqual(st.hours().month, awake.month());
+    assert.ok(st.hours().minutes < 60, 'счётчик начат заново: ' + st.hours().minutes);
+  });
+
+  await t('долгий сон не записывается в отработанные часы', async () => {
+    // Между тиками мог пройти час, потому что процесс спал. Записывать этот
+    // час как отработанный нельзя — иначе бюджет сгорит на ровном месте.
+    const st = fakeStore(awake.month(), 0);
+    withEnv({ RENDER: 'true' }, () => awake.start(base, { store: st }));
+    await new Promise(r => setTimeout(r, 30));
+    await awake.tick(base, 10);
+    awake.stop();
+    assert.ok(st.hours().minutes <= 15, 'засчитали не больше периода с запасом: ' + st.hours().minutes);
+  });
+
   stub.close();
   console.log('awake: ' + n + ' тестов пройдено\n');
 })().catch(e => { console.error('  ✗ ' + (e.stack || e.message)); process.exit(1); });
