@@ -284,6 +284,76 @@ function noteStale(age) {
     'стучится на /health хотя бы раз в 10 минут.');
 }
 
+/* ------------------------------------------------------------ воронка */
+
+/* Где люди отваливаются. Считаем по отметкам в кабинетах, а не по событиям:
+ * событий нет, а отметки уже есть и переживают перезапуск.
+ *
+ * Шаги идут по возрастанию: каждый следующий — подмножество предыдущего.
+ * «Открыл» ставится при первом входе в приложение, поэтому это все, кто вообще
+ * до нас дошёл. Последний шаг — не «закончил настройку», а первое сообщение от
+ * живого клиента: только оно означает, что продукт заработал. */
+/* Настоящая цепочка всего одна: открыл приложение → подключил бота → боту
+ * написал живой клиент. Только она строго вложена, и только в ней «отвалился»
+ * означает «не дошёл».
+ *
+ * «Добавил материалы» и «закончил настройку» в цепочку не входят: клиент может
+ * написать боту раньше, чем владелец нажмёт «готово», а работать бот начинает и
+ * без базы знаний — просто передаёт всё человеку. Ставить их шагами воронки
+ * значит рисовать отвал там, где его нет. Показываем отдельно. */
+const FUNNEL_STEPS = [
+  ['opened', 'Открыл приложение'],
+  ['connected', 'Подключил бота'],
+  ['firstClient', 'Боту написал клиент'],
+];
+
+/**
+ * Где люди отваливаются. Считаем по отметкам в кабинетах, а не по событиям:
+ * событий нет, а отметки уже есть и переживают перезапуск.
+ * @param {Array} all все кабинеты
+ * @param {number} days 0 — за всё время, иначе только заведённые за N дней
+ */
+function funnel(all, days = 0) {
+  const since = days ? Date.now() - days * 86400000 : 0;
+  // Кабинеты, заведённые до появления отметок, иначе выглядели бы как
+  // «открыл и бросил». Считаем их отдельно.
+  const rows = all.filter(w => w.milestones && w.milestones.opened && w.milestones.opened >= since);
+
+  const steps = FUNNEL_STEPS.map(([key, title], i) => {
+    // Дошедший до дальнего шага прошёл и ближние, даже если отметка потерялась:
+    // клиент не может написать боту, которого не подключили.
+    const later = FUNNEL_STEPS.slice(i).map(([k]) => k);
+    const count = rows.filter(w => later.some(k => w.milestones[k])).length;
+    return { key, title, count };
+  });
+
+  const top = steps[0].count || 0;
+  steps.forEach((s, i) => {
+    s.ofAll = top ? Math.round((s.count / top) * 100) : 0;
+    const prev = i ? steps[i - 1].count : s.count;
+    s.ofPrev = prev ? Math.round((s.count / prev) * 100) : 0;
+    s.lost = i ? prev - s.count : 0;
+  });
+
+  // Сколько времени занимает путь у тех, кто его прошёл. Медиана, а не среднее:
+  // один владелец, вернувшийся через неделю, перекосил бы среднее.
+  const spans = rows.filter(w => w.milestones.firstClient)
+    .map(w => w.milestones.firstClient - w.milestones.opened).sort((a, b) => a - b);
+  const median = spans.length ? spans[Math.floor(spans.length / 2)] : 0;
+
+  return {
+    days, total: rows.length, steps,
+    // Отдельно от медианы: путь за полминуты округляется в ноль, и без счётчика
+    // «0» не отличить от «никто не дошёл».
+    reached: spans.length,
+    medianMinutes: Math.round(median / 60000),
+    // Не шаги воронки, а признаки: делают ли люди это вообще.
+    withKnowledge: rows.filter(w => w.milestones.knowledge).length,
+    finished: rows.filter(w => w.milestones.onboarded).length,
+    untracked: all.length - rows.length,
+  };
+}
+
 /* ------------------------------------------------------------ выгрузка данных */
 
 /* Право забрать свои данные из сервиса требует, чтобы их можно было именно
@@ -447,6 +517,8 @@ async function handleIncoming(w, msg) {
     d.unread = true;
     d.touches = (d.touches || 0) + 1;
     w.counters.msgs++;
+    // Момент, ради которого всё и настраивалось: боту написал живой человек.
+    store.mark(w, 'firstClient');
     store.save(w);
     pushDialog(w, d);
 
@@ -755,16 +827,20 @@ const routes = {
   'POST /api/state': async (req, res, body, user) => {
     const w = store.getOrCreate(user.id);
     const myName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || 'Владелец';
+    let dirty = store.mark(w, 'opened');
     // Владелец — всегда первый в команде: он получает передачи и подписывает ответы.
     if (!w.team.length) {
       w.team.push({ name: myName, un: user.username || '', role: 'владелец', dept: w.depts[0], tgId: user.id, code: '' });
-      store.save(w);
+      dirty = true;
     }
-    ok(res, { ok: true, state: publicState(w), me: { id: user.id, name: myName, un: user.username || '' } });
+    if (dirty) store.save(w);
+    ok(res, { ok: true, state: publicState(w), me: { id: user.id, name: myName, un: user.username || '' },
+      admin: cfg.adminIds.includes(Number(user.id)) });
   },
 
   'POST /api/onboarded': async (req, res, body, user) => {
     const w = store.getOrCreate(user.id);
+    store.mark(w, 'onboarded');
     w.onboarded = true; w.step = 5; store.save(w);
     ok(res, { ok: true });
   },
@@ -800,6 +876,7 @@ const routes = {
       webhookSecret,
     };
     if (!w.biz.name) w.biz.name = me.first_name || '';
+    store.mark(w, 'connected');
     store.bindBot(w, me.id, webhookSecret);
     store.save(w);
 
@@ -896,7 +973,9 @@ const routes = {
     const room = limits.checkKnowledgeRoom(w, String(body.body || '').length);
     if (!room.ok) return fail(res, 400, 'База знаний заполнена: ' + Math.round(room.limit / 1000) + ' тыс. знаков. Удалите лишнее или сократите текст.');
     const item = knowledgeItem(body);
-    w.knowledge.push(item); store.save(w);
+    w.knowledge.push(item);
+    if (item.ready) store.mark(w, 'knowledge');
+    store.save(w);
     ok(res, { ok: true, knowledge: publicState(w).knowledge });
   },
 
@@ -945,6 +1024,7 @@ const routes = {
       w.knowledge.push(item); added.push(item);
     }
     if (!added.length) return fail(res, 400, 'Все разделы пустые');
+    store.mark(w, 'knowledge');
     store.save(w);
     ok(res, { ok: true, added: added.length, knowledge: publicState(w).knowledge });
   },
@@ -1035,6 +1115,7 @@ const routes = {
       addedAt: Date.now(),
     };
     w.knowledge.push(item);
+    store.mark(w, 'knowledge');
     store.save(w);
     ok(res, { ok: true, knowledge: publicState(w).knowledge, chars: item.body.length, title: item.title });
   },
@@ -1266,6 +1347,7 @@ const routes = {
     const day = new Date().toISOString().slice(0, 10);
     ok(res, {
       ok: true,
+      funnel: funnel(all, Number(body.days) || 0),
       stats: {
         workspaces: all.length,
         connected: all.filter(w => w.bot && w.bot.connected).length,

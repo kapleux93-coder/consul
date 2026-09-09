@@ -631,7 +631,7 @@ function aiReply(input){
    Навигация
    ============================================================ */
 const SCREENS = $('#screens');
-const TABS_OF = { home:'home', inbox:'inbox', chat:null, clients:'clients', knowledge:'more', kbsplit:'more', kbedit:'more', aiset:'ai', analytics:'more', channel:'more', more:'more' };
+const TABS_OF = { home:'home', inbox:'inbox', chat:null, clients:'clients', knowledge:'more', kbsplit:'more', kbedit:'more', funnel:'more', aiset:'ai', analytics:'more', channel:'more', more:'more' };
 const ONB = ['welcome','connect','connected','business','aiwiz','team','test'];
 let stack = [];
 let current = null;
@@ -1633,6 +1633,70 @@ MOUNT.kbedit = el => {
   });
 };
 
+/* ---------- Воронка онбординга (только для владельца сервиса) ---------- */
+/* Показывает не «сколько всего», а где люди перестают идти дальше. Три шага —
+ * единственная строго вложенная цепочка: остальное происходит вразнобой. */
+
+let funnelData = null;   // { days, busy, data }
+
+VIEWS.funnel = () => {
+  const st = funnelData || (funnelData = { days: 0, busy: true, data: null });
+  const f = st.data;
+  const PERIODS = [[0,'Всё время'],[7,'7 дней'],[30,'30 дней']];
+  return `
+${topbar('Воронка','')}
+<div class="body"><div class="pad-core g16">
+  <div class="col g8"><div class="h3">Куда доходят владельцы</div>
+    <div class="sub-s">Считаем по отметкам в кабинетах. Кабинет попадает сюда с первого открытия приложения.</div></div>
+  <div class="seg">${PERIODS.map(([d,l])=>`<button class="${st.days===d?'on':''}" data-act="funnel-days" data-d="${d}">${l}</button>`).join('')}</div>
+  ${st.busy ? `<div class="box plain" style="border-radius:18px;padding:22px;text-align:center"><div class="cap">Считаю…</div></div>`
+   : !f ? `<div class="box plain" style="border-radius:18px;padding:22px;text-align:center"><div class="cap">Не удалось получить сводку.</div></div>`
+   : !f.total ? `<div class="box plain" style="border-radius:18px;padding:22px;text-align:center">
+        <div class="cap">За этот период никто не заходил.${f.untracked ? ' Кабинетов, заведённых до счётчика: ' + f.untracked + '.' : ''}</div></div>`
+   : `
+  <div class="col g10">
+    ${f.steps.map((s,i)=>`
+      <div class="box plain" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:9px">
+        <div class="between">
+          <div style="font:600 15px/1 var(--f)">${esc(s.title)}</div>
+          <div style="font:600 15px/1 var(--f)">${s.count}</div>
+        </div>
+        <div style="height:8px;border-radius:6px;background:var(--line4);overflow:hidden">
+          <div style="height:100%;width:${s.ofAll}%;background:var(--accent);border-radius:6px"></div>
+        </div>
+        <div class="cap2">${s.ofAll}% от всех${i ? ` · с прошлого шага дошли ${s.ofPrev}%` + (s.lost ? `, потеряли ${s.lost}` : '') : ''}</div>
+      </div>`).join('')}
+  </div>
+  <div class="list plain">
+    ${[['Добавили материалы', f.withKnowledge + ' из ' + f.total],
+       ['Нажали «готово» в настройке', f.finished + ' из ' + f.total],
+       ['Путь до первого клиента', !f.reached ? 'ещё не дошли'
+          : (f.medianMinutes ? humanMins(f.medianMinutes) : 'меньше минуты') + ' (медиана)'],
+       ['Кабинеты до появления счётчика', String(f.untracked)]].map(([t,v])=>`
+      <div class="between" style="padding:13px 0"><div style="font:500 14px/1 var(--f)">${t}</div>
+        <div class="cap" style="font-size:13px">${esc(v)}</div></div>`).join('')}
+  </div>
+  <div class="cap2">Материалы и «готово» — не шаги воронки: клиент может написать боту раньше, чем владелец закончит настройку, и бот работает даже с пустой базой.</div>`}
+</div></div>`;
+};
+
+/** «135 мин» читается хуже, чем «2 ч 15 мин». */
+function humanMins(m){
+  if(m < 60) return m + ' ' + plural(m,'минута','минуты','минут');
+  const h = Math.floor(m/60), r = m % 60;
+  if(h < 24) return h + ' ' + plural(h,'час','часа','часов') + (r ? ' ' + r + ' мин' : '');
+  const d = Math.floor(h/24);
+  return d + ' ' + plural(d,'день','дня','дней') + (h % 24 ? ' ' + (h%24) + ' ч' : '');
+}
+
+async function loadFunnel(){
+  const st = funnelData;
+  st.busy = true; paint('funnel', false);
+  try { st.data = (await NET.req('/api/admin/stats', { days: st.days })).funnel; }
+  catch(e){ st.data = null; netErr(e); }
+  st.busy = false; paint('funnel', false);
+}
+
 /* ---------- AI Settings ---------- */
 /** Карточка снятого голоса компании в настройках AI. */
 function voiceCard(){
@@ -2023,7 +2087,9 @@ VIEWS.more = () => `
        ['channel','Channel','Beta','NEW'],
        ['analytics','Analytics',''],
        ['billing','Billing','Pro · до 12 сентября'],
-       ['settings','Settings','']].map(([k,t,d,badge])=>`
+       ['settings','Settings','']]
+      .concat(NET.admin ? [['funnel','Воронка','Только для вас','SERVICE']] : [])
+      .map(([k,t,d,badge])=>`
       <button class="between" style="width:100%" data-act="more-go" data-k="${k}">
         <div class="col g4" style="text-align:left"><div style="font:500 15px/1 var(--f)">${t}</div>
           ${d?`<div class="cap2">${d}</div>`:''}</div>
@@ -2394,6 +2460,8 @@ const ACT = {
   },
 
   /* --- разбор простыни и правка материалов --- */
+  'funnel-days': (b) => { funnelData.days = +b.dataset.d; haptic('sel'); loadFunnel(); },
+
   'kb-split': () => { kbSplit = { text:'', sections:null, busy:false, err:'' }; go('kbsplit'); },
   'sp-kind': (b) => { kbSplit.sections[+b.dataset.i].kind = b.dataset.k; haptic('sel'); paint('kbsplit', false); },
   'sp-drop': (b) => {
@@ -2536,6 +2604,7 @@ const ACT = {
   'more-go': (b) => {
     const k = b.dataset.k;
     if(k === 'knowledge' || k === 'analytics' || k === 'channel'){ go(k); return; }
+    if(k === 'funnel'){ funnelData = { days: 0, busy: true, data: null }; go('funnel'); loadFunnel(); return; }
     if(k === 'team'){ teamEdit = true; paint('team', false); return; }
     if(k === 'billing'){
       const u = S.usage;
@@ -2781,7 +2850,7 @@ async function init(){
     NET.initData = (TG && TG.initData) || (CFG && CFG.devInitData) || '';
     try {
       const r = await NET.req('/api/state', {});
-      NET.me = r.me; NET.ready = true;
+      NET.me = r.me; NET.admin = !!r.admin; NET.ready = true;
       applyState(r.state);
       // Диплинк из уведомления «AI передал диалог»: t.me/bot?startapp=d<chatId>
       const start = (TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param) || '';

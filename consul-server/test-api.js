@@ -469,6 +469,78 @@ function makeDocx(text) {
     groqOn = true;
   });
 
+  console.log('api / воронка онбординга');
+
+  await t('чужому сводка не отдаётся', async () => {
+    const r = await api('/api/admin/stats');
+    assert.strictEqual(r.status, 403);
+  });
+
+  await t('воронка показывает, где отваливаются', async () => {
+    const saved = process.env.ADMIN_IDS;
+    process.env.ADMIN_IDS = '4242';
+    try {
+      const r = await api('/api/admin/stats');
+      assert.strictEqual(r.status, 200);
+      const f = r.json.funnel;
+      assert.deepStrictEqual(f.steps.map(s => s.key), ['opened', 'connected', 'firstClient']);
+      assert.ok(typeof f.withKnowledge === 'number', 'материалы считаются отдельно от воронки');
+      assert.ok(typeof f.finished === 'number', 'и завершённая настройка тоже');
+      assert.ok(f.steps[0].count >= 1, 'кабинет теста попал в воронку');
+      // Шаги вложены друг в друга: следующий не может быть больше предыдущего.
+      for (let i = 1; i < f.steps.length; i++) {
+        assert.ok(f.steps[i].count <= f.steps[i - 1].count,
+          f.steps[i].key + ' больше, чем ' + f.steps[i - 1].key);
+      }
+      assert.strictEqual(f.steps[0].ofAll, 100, 'первый шаг — база отсчёта');
+      assert.ok(f.steps.every(s => s.ofPrev >= 0 && s.ofPrev <= 100), 'доли в пределах ста');
+    } finally {
+      if (saved === undefined) delete process.env.ADMIN_IDS; else process.env.ADMIN_IDS = saved;
+    }
+  });
+
+  await t('отметки ставятся один раз и не сдвигаются', async () => {
+    const w = store.getOrCreate(4242);
+    const first = w.milestones.opened;
+    assert.ok(first, 'вход отмечен');
+    await api('/api/state');
+    assert.strictEqual(store.getOrCreate(4242).milestones.opened, first, 'повторный вход не переписал отметку');
+  });
+
+  await t('клиент, написавший до конца настройки, не ломает воронку', async () => {
+    // «Закончил настройку» не на пути к «боту написал клиент»: человек может
+    // не нажать «готово» никогда, а бот уже работает. Шаги должны остаться
+    // вложенными, иначе на графике появится отрицательный отвал.
+    const saved = process.env.ADMIN_IDS;
+    process.env.ADMIN_IDS = '4242';
+    try {
+      const f = (await api('/api/admin/stats')).json.funnel;
+      for (let i = 1; i < f.steps.length; i++) {
+        assert.ok(f.steps[i].count <= f.steps[i - 1].count,
+          f.steps[i].key + ' (' + f.steps[i].count + ') больше ' + f.steps[i - 1].key + ' (' + f.steps[i - 1].count + ')');
+        assert.ok(f.steps[i].lost >= 0, 'отвал не может быть отрицательным');
+      }
+    } finally {
+      if (saved === undefined) delete process.env.ADMIN_IDS; else process.env.ADMIN_IDS = saved;
+    }
+  });
+
+  await t('кабинеты без отметок в воронку не попадают', async () => {
+    // Заведённые до появления счётчика иначе выглядели бы как «открыл и бросил».
+    const old = store.getOrCreate(9911);
+    old.milestones = { opened: 0, connected: 0, knowledge: 0, onboarded: 0, firstClient: 0 };
+    store.save(old);
+    const saved = process.env.ADMIN_IDS;
+    process.env.ADMIN_IDS = '4242';
+    try {
+      const r = await api('/api/admin/stats');
+      assert.ok(r.json.funnel.untracked >= 1, 'посчитаны отдельно: ' + r.json.funnel.untracked);
+    } finally {
+      if (saved === undefined) delete process.env.ADMIN_IDS; else process.env.ADMIN_IDS = saved;
+      store.remove(9911);
+    }
+  });
+
   await t('приветствие платформенного бота открывает кабинет одной кнопкой', async () => {
     // Человек приходит по ссылке из рекламы. Если сказать ему «нажмите кнопку
     // в меню бота», половина не найдёт её — кнопка должна быть в сообщении.

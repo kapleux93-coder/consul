@@ -232,6 +232,11 @@ function defaults(ownerId) {
     dialogs: {},
     counters: { msgs: 0, byAi: 0, handed: 0 },
     usage: { calls: 0, tokensIn: 0, tokensOut: 0, errors: 0 },
+    /* Когда владелец прошёл ключевые точки настройки. Ставится один раз и
+     * больше не меняется: по этим отметкам видно, на каком шаге люди бросают.
+     * Считать их из текущего состояния нельзя — оно говорит «где человек
+     * сейчас», а не «докуда он дошёл и когда». */
+    milestones: { opened: 0, connected: 0, knowledge: 0, onboarded: 0, firstClient: 0 },
   };
 }
 
@@ -250,6 +255,18 @@ function getOrCreate(ownerId) {
   for (const k of Object.keys(def)) if (w[k] == null) w[k] = def[k];
   for (const k of Object.keys(def.ai)) if (w.ai[k] == null) w.ai[k] = def.ai[k];
   return w;
+}
+
+/**
+ * Отмечает пройденную точку. Повторный вызов ничего не меняет: нам нужен
+ * момент, когда человек дошёл до шага впервые.
+ * @returns {boolean} отметка поставлена сейчас
+ */
+function mark(w, name, now = Date.now()) {
+  if (!w.milestones) w.milestones = defaults(w.ownerId).milestones;
+  if (w.milestones[name]) return false;
+  w.milestones[name] = now;
+  return true;
 }
 
 function save(w) {
@@ -353,7 +370,7 @@ const genId = () => crypto.randomBytes(8).toString('hex');
 module.exports = {
   get, getOrCreate, save, defaults, remove,
   findByBotId, findByWebhookSecret, bindBot, unbindBot, allConnected, allWorkspaces,
-  dialog, upsertDialog, pushMessage,
+  dialog, upsertDialog, pushMessage, mark,
   hours, addMinutes,
   persist, persistNow, genId, initRemote,
   snapshot, snapshots,
