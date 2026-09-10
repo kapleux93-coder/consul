@@ -72,7 +72,9 @@ input::placeholder,textarea::placeholder{color:var(--muted6)}
 .h5{font:600 16px/1 var(--f)}
 .sub{font:400 15px/1.5 var(--f);color:var(--muted2);text-wrap:pretty}
 .sub-s{font:400 14px/1.5 var(--f);color:var(--muted2);text-wrap:pretty}
-.lbl{font:500 11px/1 var(--m);letter-spacing:.12em;text-transform:uppercase;color:var(--muted4)}
+/* Подзаголовок секции — обычными буквами. КАПС с разрядкой читается как
+   заголовок из конструктора лендингов, а не как подпись в рабочем экране. */
+.lbl{font:500 13px/1 var(--f);color:var(--muted3)}
 .cap{font:400 13px/1.4 var(--f);color:var(--muted4)}
 .cap2{font:400 12px/1.3 var(--f);color:var(--muted4)}
 .num{font-family:var(--m)}
@@ -126,7 +128,10 @@ input::placeholder,textarea::placeholder{color:var(--muted6)}
 
 .av{border-radius:14px;background:var(--soft2);color:var(--muted2);font:600 14px/1 var(--m);display:flex;align-items:center;justify-content:center;flex:none}
 .av.warm{background:var(--accent-t);color:var(--accent)}
-.badge{border-radius:999px;padding:5px 10px;font:600 10px/1 var(--m);letter-spacing:.04em;white-space:nowrap}
+/* Метка статуса — подпись, а не ярлык: без разрядки, обычным шрифтом и на
+   полтона тише текста. Капслок с letter-spacing поверх русских имён читается
+   как чужой шаблон. */
+.badge{border-radius:999px;padding:4px 9px;font:500 11px/1 var(--f);white-space:nowrap}
 .badge.att{background:var(--accent-t3);color:var(--accent-d)}
 .badge.ai{background:var(--line3);color:var(--muted2)}
 .badge.human{background:var(--blue-t);color:var(--blue-d)}
@@ -147,7 +152,7 @@ input::placeholder,textarea::placeholder{color:var(--muted6)}
 .stat.warm b{color:var(--accent-d)}
 .stat.warm span{color:var(--accent-ink2)}
 
-.drop{border:1px dashed var(--dash);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:5px;transition:.15s}
+.drop{border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:5px;transition:.15s}
 .drop:active{background:var(--soft)}
 .drop b{font:600 14px/1 var(--f)}
 .drop span{font:400 12px/1.3 var(--f);color:var(--muted4)}
@@ -273,7 +278,7 @@ const I = {
   home: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3.5l9 7"/><path d="M5.5 9.5V20h13V9.5"/></svg>`,
   inbox:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v9.5a2 2 0 0 1-2 2H9l-5 3.5V5.5Z"/></svg>`,
   cl:   `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.6 3.9-5.2 7-5.2s5.8 1.6 7 5.2"/></svg>`,
-  ai:   `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.7 8l4.6 1.7-4.6 1.7L12 16l-1.7-4.6L5.7 9.7 10.3 8 12 3.5Z"/><path d="M18 16.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/></svg>`,
+  ai:   `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5c0-3.6 3.6-6.5 8-6.5s8 2.9 8 6.5-3.6 6.5-8 6.5c-.9 0-1.8-.1-2.6-.3L5 19.5l1-3.3C4.7 15 4 13.3 4 11.5Z"/><path d="M9 11.5h.01M12 11.5h.01M15 11.5h.01"/></svg>`,
   more: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="fill"><circle cx="5.5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18.5" cy="12" r="1.5"/></svg>`
 };
 
@@ -327,7 +332,7 @@ function demoData(S){
         {r:'user', t:'Здравствуйте, нужны светильники для офиса, 20 штук', ts:t-32*m},
         {r:'ai',   t:'Здравствуйте! Для офиса подойдут панели Lumen Office — 3 200 ₽ за штуку, при заказе от 10 скидка 7%. Уточните высоту потолков?', ts:t-31*m},
         {r:'user', t:'3 метра. Нужен счёт на организацию, ИНН пришлю', ts:t-14*m},
-        {r:'sys',  t:'AI передал диалог: запрос счёта и документов', ts:t-14*m}
+        {r:'sys',  t:'Бот передал разговор: запрос счёта и документов', ts:t-14*m}
       ] },
     { id:'d2', name:'Игорь П.', full:'Игорь Петров', un:'igor_p', phone:'+7 903 ••• 11 07', status:'ai', stage:'customer',
       unread:false, ts:t-27*m, interest:'Торшер Lumen Arc', mgr:'—', touches:2, note:'',
@@ -684,7 +689,7 @@ function tabbar(active){
   const u = unreadCount();
   const t = (id, icon, label) => `<button class="tab${active===id?' on':''}" data-tab="${id}">${icon}<span>${label}</span>${id==='inbox'&&u?`<div class="bdg">${u}</div>`:''}</button>`;
   return `<div class="tabbar">
-    ${t('home', I.home,'Home')}${t('inbox', I.inbox,'Inbox')}${t('clients', I.cl,'Clients')}${t('ai', I.ai,'AI')}${t('more', I.more,'More')}
+    ${t('home', I.home,'Главное')}${t('inbox', I.inbox,'Диалоги')}${t('clients', I.cl,'Клиенты')}${t('ai', I.ai,'Бот')}${t('more', I.more,'Ещё')}
   </div>`;
 }
 const TAB_VIEW = { home:'home', inbox:'inbox', clients:'clients', ai:'aiset', more:'more' };
@@ -725,16 +730,20 @@ function botCard(){
 }
 /** Насколько клиент близок к покупке — по оценке модели после каждого ответа. */
 function tempBadge(t){
-  if(t === 'hot')  return `<div class="badge" style="background:#FFE9DE;color:#C9531A">🔥 ГОРЯЧИЙ</div>`;
-  if(t === 'warm') return `<div class="badge" style="background:#FFF4EC;color:#B0764C">ТЁПЛЫЙ</div>`;
+  // Без эмодзи: огонёк рядом с именем клиента выглядит как маркетплейс,
+  // а не как рабочий инструмент продавца.
+  if(t === 'hot')  return `<div class="badge" style="background:#FFE9DE;color:#C9531A">готов купить</div>`;
+  if(t === 'warm') return `<div class="badge" style="background:#FFF4EC;color:#B0764C">присматривается</div>`;
   return '';
 }
 
 function statusBadge(st){
-  if(st === 'attention') return `<div class="badge att">NEEDS ATTENTION</div>`;
-  if(st === 'human')     return `<div class="badge human">HUMAN</div>`;
-  if(st === 'closed')    return `<div class="badge ok">CLOSED</div>`;
-  return `<div class="badge ai">AI</div>`;
+  // Русский и строчными: капслоком по-английски поверх русских имён клиентов
+  // интерфейс выглядит как чужой шаблон, а не как свой инструмент.
+  if(st === 'attention') return `<div class="badge att">ждёт вас</div>`;
+  if(st === 'human')     return `<div class="badge human">вы отвечаете</div>`;
+  if(st === 'closed')    return `<div class="badge ok">закрыт</div>`;
+  return `<div class="badge ai">бот</div>`;
 }
 
 /* ============================================================
@@ -852,7 +861,7 @@ ${topbar('Connect your bot','1/5')}
       <div style="display:flex;align-items:center;gap:7px;background:var(--green-t);border-radius:999px;padding:6px 11px">
         <div class="dot" style="width:7px;height:7px"></div>
         <div style="font:600 11px/1 var(--m);letter-spacing:.06em;color:var(--green-d)">CONNECTED</div></div></div>
-    <div class="between"><div style="font:400 14px/1 var(--f);color:var(--muted3)">Webhook</div><div style="font:500 14px/1 var(--f)">Активен</div></div>
+    <div class="between"><div style="font:400 14px/1 var(--f);color:var(--muted3)">Приём сообщений</div><div style="font:500 14px/1 var(--f)">Активен</div></div>
     <div class="between"><div style="font:400 14px/1 var(--f);color:var(--muted3)">Подписчиков</div><div style="font:500 14px/1 var(--f)">${nf(S.bot.subs)}</div></div>
   </div>
   <div class="box warm" style="border-radius:16px">Клиенты по-прежнему пишут в вашего бота — ничего переносить не нужно.</div>
@@ -868,7 +877,7 @@ ${topbar('About your business','2/5')}
 <div class="body"><div class="pad">
   ${steps(2)}
   <div class="col g8"><div class="h2">Расскажите о компании</div>
-    <div class="sub">На этом AI будет строить ответы. Можно коротко — детали добавим потом.</div></div>
+    <div class="sub">На этом бот будет строить ответы. Можно коротко — детали добавим потом.</div></div>
   <div class="col g12">
     <div class="field"><div class="lbl">Название</div>
       <div class="inp"><input id="bizName" placeholder="Nordlight Store" value="${esc(S.biz.name)}"></div></div>
@@ -879,7 +888,7 @@ ${topbar('About your business','2/5')}
       <div class="inp"><textarea id="bizAbout" rows="3" placeholder="Продаём светильники и решения для освещения дома…">${esc(S.biz.about)}</textarea></div></div>
   </div>
   <div class="col g9">
-    <div class="lbl">Материалы для AI</div>
+    <div class="lbl">Материалы для бота</div>
     <div class="row wrap g9">
       ${[['file','+ Файл'],['price','+ Прайс'],['faq','+ FAQ'],['link','+ Ссылка']].map(([k,l])=>
         `<button class="drop" style="border-radius:13px;padding:12px 14px;font:500 14px/1 var(--f);color:var(--muted)" data-act="add-mat" data-kind="${k}">${l}</button>`).join('')}
@@ -907,12 +916,12 @@ MOUNT.business = el => {
   bind('bizName','name'); bind('bizSite','site'); bind('bizAbout','about');
 };
 
-/* ---------- 03 AI Manager (wizard) ---------- */
+/* ---------- 03 Как отвечает бот (шаг мастера) ---------- */
 VIEWS.aiwiz = () => `
-${topbar('AI Manager','3/5')}
+${topbar('Как отвечает бот','3/5')}
 <div class="body"><div class="pad">
   ${steps(3)}
-  <div class="col g8"><div class="h2">Как AI будет общаться</div>
+  <div class="col g8"><div class="h2">Как бот будет общаться</div>
     <div class="sub">Имя и манера. Остальное можно поменять позже.</div></div>
   <div class="field"><div class="lbl">Имя менеджера</div>
     <div class="inp"><input id="wizName" value="${esc(S.ai.name || '')}" placeholder="Ника" maxlength="40"></div>
@@ -928,7 +937,7 @@ ${topbar('AI Manager','3/5')}
     <div class="f1 field"><div class="lbl">Ответы</div>
       <button class="inp" data-act="pick-len">${lenName(S.ai.length)}<span style="color:var(--muted6)">▾</span></button></div>
   </div>
-  <div class="col g9"><div class="lbl">AI может сам</div>
+  <div class="col g9"><div class="lbl">Что боту разрешено</div>
     <div class="list" style="padding:4px 14px">
       ${[['canProducts','Отвечать о товарах и ценах'],['canContacts','Собирать телефон и имя'],['canDiscount','Давать скидки']].map(([k,l])=>
         `<div class="between" style="padding:13px 0"><div style="font:500 15px/1 var(--f)">${l}</div>
@@ -956,11 +965,11 @@ ${topbar('Team', teamEdit ? '' : '4/5')}
 <div class="body"><div class="pad">
   ${teamEdit ? '' : steps(4)}
   <div class="col g8"><div class="h2">Кому передавать диалоги</div>
-    <div class="sub">${teamEdit ? 'Менеджеры получают диалог, который AI передал человеку.' : 'Добавьте менеджеров по их Telegram-username. Можно пропустить.'}</div></div>
+    <div class="sub">${teamEdit ? 'Менеджеры получают разговоры, которые бот передал человеку.' : 'Добавьте менеджеров по их Telegram-username. Можно пропустить.'}</div></div>
   <div class="list" id="teamList" style="padding:6px 16px">${teamRows()}</div>
   <div class="col g9"><div class="lbl">Отделы</div>
     <div class="row g8" id="deptRow">${deptCards()}</div></div>
-  <div class="box warm" style="border-radius:16px">Менеджеры получат уведомление в Telegram, когда AI передаст диалог.</div>
+  <div class="box warm" style="border-radius:16px">Менеджеры получат уведомление в Telegram, когда бот передаст разговор.</div>
   <div class="push col g10" style="padding-top:16px">
     ${teamEdit ? `<button class="btn" data-act="team-done">Готово</button>`
                : `<button class="btn" data-act="to-test">Далее</button>
@@ -999,7 +1008,7 @@ ${topbar('Test','5/5')}
       <div class="av warm" style="width:44px;height:44px;font-size:15px">${S.bot.connected ? esc(initials(S.bot.name)) : '—'}</div>
       <div class="f1 col g4"><div class="h5">${S.bot.connected ? esc(S.bot.name) : 'Бот не подключён'}</div>
         <div style="font:500 13px/1 var(--m);color:var(--muted3)">${S.bot.connected ? '@' + esc(S.bot.username) : 'ответы проверим здесь, в приложении'}</div></div>
-      ${S.bot.connected ? `<div class="pill-live"><div class="dot"></div>LIVE</div>` : `<div class="badge ai">DRAFT</div>`}
+      ${S.bot.connected ? `<div class="pill-live"><div class="dot"></div>на связи</div>` : `<div class="badge ai">не подключён</div>`}
     </div>
     <div style="height:1px;background:var(--line4)"></div>
     <div class="col g9" id="testFeed" style="min-height:120px"></div>
@@ -1018,7 +1027,7 @@ ${topbar('Test','5/5')}
       <div style="font:400 14px/1.3 var(--f);color:${done ? 'var(--ink3)' : 'var(--muted4)'}">${esc(t)}</div></div>`).join('')}
   </div>
   <div class="push col g10">
-    <button class="btn" data-act="focus-test">Протестировать AI</button>
+    <button class="btn" data-act="focus-test">Проверить, как отвечает</button>
     <button class="btn ghost" data-act="finish">Перейти на главный экран</button>
   </div>
 </div></div>`;
@@ -1029,7 +1038,7 @@ function checklist(){
   const linked = NET.on ? S.team.filter(m => m.linked).length : S.team.length;
   return [
     [!!S.bot.connected, S.bot.connected ? 'Бот @' + S.bot.username + ' подключён' : 'Бот пока не подключён'],
-    [kb > 0, kb ? 'AI знает ' + kb + ' ' + plural(kb,'источник','источника','источников') : 'База знаний пустая — AI не сможет отвечать по фактам'],
+    [kb > 0, kb ? 'Бот знает ' + kb + ' ' + plural(kb,'источник','источника','источников') : 'База знаний пустая — Бот не сможет отвечать по фактам'],
     [linked > 0, linked ? linked + ' ' + plural(linked,'человек получает','человека получают','человек получают') + ' передачи' : 'Передачи пока некому получать'],
     [NET.on ? NET.aiReady : true, NET.on ? (NET.aiReady ? 'Модель подключена' : 'Модель не настроена на сервере') : 'Демо-режим: ответы по локальным правилам'],
   ];
@@ -1054,7 +1063,7 @@ function renderTestFeed(feed, replayLast){
     ? `<div class="bub out">${esc(m.t)}</div>`
     : `<div class="bub in flat">${esc(m.t)}</div>` + (m.ms ? `<div class="row g6" style="padding-left:4px">
         <div style="width:5px;height:5px;border-radius:3px;background:var(--accent)"></div>
-        <div style="font:500 12px/1 var(--f);color:var(--muted4)">Ответил AI · ${m.ms} сек${m.src ? ' · источник: ' + esc(m.src) : ''}${m.model ? ' · ' + esc(m.model) : ''}</div></div>` : '')).join('');
+        <div style="font:500 12px/1 var(--f);color:var(--muted4)">Ответил бот · ${m.ms} сек${m.src ? ' · источник: ' + esc(m.src) : ''}${m.model ? ' · ' + esc(m.model) : ''}</div></div>` : '')).join('');
   if(replayLast && testLog.length === 1 && !testLog[0].asked){ testLog[0].asked = true; setTimeout(()=>testAnswer(testLog[0].t), 500); }
   feed.scrollTop = feed.scrollHeight;
 }
@@ -1073,7 +1082,7 @@ async function testAnswer(q){
         ms: r.fallback ? null : (r.ms / 1000).toFixed(1),
         model: r.fallback ? '' : (r.model || ''),
       });
-      if(r.fallback) testLog.push({ r:'ai', t:'⚠️ AI недоступен' + (r.error ? ': ' + r.error : '') + '. Диалог ушёл человеку — выдумывать ответ бот не станет.' });
+      if(r.fallback) testLog.push({ r:'ai', t:'Бот недоступен' + (r.error ? ': ' + r.error : '') + '. Диалог ушёл человеку — выдумывать ответ бот не станет.' });
       else if(r.handoff) testLog.push({ r:'ai', t:'⚡ Диалог передан менеджеру' + (r.reason ? ' — ' + r.reason : '') });
       renderTestFeed(feed); haptic('light');
     } catch(e){
@@ -1107,6 +1116,8 @@ VIEWS.home = () => {
   const recent = S.dialogs.slice().sort((a,b)=>b.ts-a.ts).slice(0,3);
   const newCl = NET.on ? S.dialogs.filter(d=>d.stage==='new').length : S.dialogs.filter(d=>d.stage==='new').length + 8;
   const active = S.dialogs.filter(d=>d.status!=='closed').length;
+  // Единственное, что требует действия прямо сейчас. Всё остальное — справка.
+  const waiting = S.dialogs.filter(d=>d.status==='attention').length;
   return `
 <div class="body"><div class="pad-core">
   ${statusBanner()}
@@ -1117,28 +1128,29 @@ VIEWS.home = () => {
     </button>
   </div>
 
-  <div class="darkcard">
-    <div class="between">
-      <div class="row g9"><div style="width:8px;height:8px;border-radius:4px;background:${S.ai.paused?'#F26722':'var(--green-l)'}"></div>
-        <div style="font:600 15px/1 var(--f);color:#fff">AI Manager · ${S.ai.paused?'Paused':'Active'}</div></div>
-      <button style="font:500 13px/1 var(--f);color:var(--accent)" data-act="toggle-pause">${S.ai.paused?'Включить':'Пауза'}</button>
+  ${waiting ? `
+  <button class="box warm" style="border-radius:18px;display:flex;align-items:center;gap:13px;width:100%;text-align:left" data-act="filter-att">
+    <div class="f1 col g4">
+      <div style="font:600 16px/1.25 var(--f);color:var(--accent-ink)">${waiting} ${plural(waiting,'разговор ждёт','разговора ждут','разговоров ждут')} вас</div>
+      <div style="font:400 13px/1.4 var(--f);color:var(--accent-ink2)">Бот не смог ответить сам и передал их вам.</div>
     </div>
-    <div style="font:400 14px/1.45 var(--f);color:var(--dark-mut)">${S.ai.paused
-      ? 'AI на паузе — все новые диалоги идут менеджерам.'
+    <div style="color:var(--accent);font:400 18px/1 var(--f)">›</div>
+  </button>` : ''}
+
+  <div class="row g9" style="align-items:flex-start">
+    <div style="width:8px;height:8px;border-radius:4px;margin-top:6px;flex:none;background:${S.ai.paused?'var(--accent)':'var(--green-d)'}"></div>
+    <div class="f1" style="font:400 14px/1.5 var(--f);color:var(--ink2)">${S.ai.paused
+      ? 'Бот на паузе. Всё, что напишут клиенты, придёт вам.'
       : !S.bot.connected ? 'Бот не подключён — отвечать пока некому.'
-      : 'Отвечает от имени @' + esc(S.bot.username) + '. Последний ответ ' + lastAgo() + '.'}</div>
-    <div class="row g10">
-      <div class="kpi"><b>${rate}%</b><span>решено без человека</span></div>
-      <div class="kpi"><b>${avgReply()}</b><span>средний ответ</span></div>
-    </div>
+      : 'Отвечает клиентам от имени @' + esc(S.bot.username) + '. Последний ответ ' + lastAgo() + '.'}</div>
+    <button class="a" style="font-size:13px;flex:none" data-act="toggle-pause">${S.ai.paused?'Включить':'Пауза'}</button>
   </div>
 
-  <div class="row g10">
-    <button class="stat" data-act="tab" data-tab="inbox"><b>${c.msgs}</b><span>сообщений</span></button>
-    <div class="stat"><b>${c.byAi}</b><span>AI ответил сам</span></div>
-    <button class="stat warm" data-act="filter-att"><b>${c.handed}</b><span>передано</span></button>
-  </div>
-  <div class="cap" style="font-size:13px">${newCl} ${plural(newCl,'новый клиент','новых клиента','новых клиентов')} · ${active} ${plural(active,'активный диалог','активных диалога','активных диалогов')}</div>
+  ${c.msgs ? `<div style="font:400 14px/1.6 var(--f);color:var(--ink2);padding-top:2px">
+    Всего <b style="font-weight:600">${c.msgs}</b> ${plural(c.msgs,'сообщение','сообщения','сообщений')} от клиентов.
+    Бот ответил сам на ${c.byAi}, вам передал ${c.handed}.${
+      active ? ` Сейчас в работе ${active} ${plural(active,'разговор','разговора','разговоров')}.` : ''}
+  </div>` : ''}
 
   <div class="col g10">
     <div class="between"><div class="h5">Последние диалоги</div>
@@ -1160,7 +1172,7 @@ function statusBanner(){
   if(!NET.on) return '';
   if(!NET.ready || NET.offline) return warnBox('Нет связи с сервером', 'Показываю последнее сохранённое состояние. Новые сообщения появятся, когда связь вернётся.');
   if(!S.bot.connected) return warnBox('Бот не подключён', 'Клиенты пока не могут написать. Подключите бота в настройке.', 'restart');
-  if(!NET.aiReady) return warnBox('AI выключен на сервере', 'Не задан GROQ_API_KEY — все диалоги уходят менеджеру, а не боту.');
+  if(!NET.aiReady) return warnBox('Бот выключен на сервере', 'Не задан GROQ_API_KEY — все диалоги уходят менеджеру, а не боту.');
   if(NET.notifyOk === false && NET.bot)
     return warnBox('Вы не получите уведомления', 'Нажмите Start у @' + NET.bot + ', иначе бот не сможет написать вам о переданных диалогах.', 'open-bot');
   if(NET.quota && NET.quota.dailyLimit && NET.quota.usedToday >= NET.quota.dailyLimit)
@@ -1209,12 +1221,12 @@ VIEWS.inbox = () => {
     human: S.dialogs.filter(d=>d.status==='human').length,
     closed: S.dialogs.filter(d=>d.status==='closed').length
   };
-  const chips = [['all','Все',counts.all],['attention','Needs attention',counts.attention],['ai','AI',counts.ai],['human','Human',counts.human],['closed','Closed',counts.closed]];
+  const chips = [['all','Все',counts.all],['attention','Ждут вас',counts.attention],['ai','Ведёт бот',counts.ai],['human','Вы отвечаете',counts.human],['closed','Закрытые',counts.closed]];
   return `
 <div class="body" style="padding:0">
   <div style="padding:calc(26px + var(--safe-top)) 20px 14px;display:flex;flex-direction:column;gap:16px">
     <div class="between" style="align-items:baseline">
-      <div class="h3">Inbox</div>
+      <div class="h3">Диалоги</div>
       <div style="font:500 13px/1 var(--f);color:var(--accent-d)">${unreadCount()} непрочитанных</div>
     </div>
     <div class="row g9" style="background:var(--soft2);border-radius:13px;padding:12px 14px">
@@ -1247,7 +1259,7 @@ function inboxRows(){
         </div>
         <div style="font:${d.unread?'500':'400'} 13px/1.35 var(--f);color:${d.unread?'var(--ink2)':'var(--muted2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(lastLine(d))}</div>
         <div class="row wrap g6" style="align-self:flex-start">
-          ${d.status==='human'&&d.mgr!=='—'?`<div class="badge human">HUMAN · ${esc(d.mgr.split(' ')[0])}</div>`:statusBadge(d.status)}
+          ${d.status==='human'&&d.mgr!=='—'?`<div class="badge human">отвечает ${esc(d.mgr.split(' ')[0])}</div>`:statusBadge(d.status)}
           ${tempBadge(d.temperature)}
         </div>
       </div>
@@ -1277,19 +1289,19 @@ VIEWS.chat = () => {
 <div style="flex:none;padding:0 18px calc(16px + var(--safe-bot));background:#FBFAF8;display:flex;flex-direction:column;gap:10px">
   ${taken ? `<div style="background:var(--dark);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px">
       <div style="width:22px;height:22px;flex:none;border-radius:7px;background:var(--dark3);display:flex;align-items:center;justify-content:center">${I.pause()}</div>
-      <div class="f1 col g4"><div style="font:600 13px/1 var(--f);color:#fff">AI paused while you reply</div>
-        <div style="font:400 12px/1.35 var(--f);color:var(--dark-mut)">Вы отвечаете как ${esc(meName())}. AI не пишет клиенту, пока диалог у вас.</div></div>
+      <div class="f1 col g4"><div style="font:600 13px/1 var(--f);color:#fff">Бот молчит, пока отвечаете вы</div>
+        <div style="font:400 12px/1.35 var(--f);color:var(--dark-mut)">Вы отвечаете как ${esc(meName())}. Бот не пишет клиенту, пока диалог у вас.</div></div>
     </div>` : `<div class="row g9">
-      <button class="btn dark f1" style="height:48px;border-radius:14px;font-size:15px" data-act="takeover">Take over</button>
+      <button class="btn dark f1" style="height:48px;border-radius:14px;font-size:15px" data-act="takeover">Забрать себе</button>
       <button class="row" style="width:48px;height:48px;border-radius:14px;background:var(--card);border:1px solid var(--line2);justify-content:center" data-act="client-card">${I.user('#5F656D')}</button>
     </div>`}
   <div class="composer"><input id="chatInp" placeholder="${taken ? 'Ответить клиенту…' : 'Ответить от имени бота…'}">
     <button class="send" data-act="chat-send">${I.arrow()}</button></div>
-  ${taken ? `<button style="text-align:center;font:500 13px/1 var(--f);color:var(--accent);width:100%" data-act="return-ai">Return to AI</button>`
+  ${taken ? `<button style="text-align:center;font:500 13px/1 var(--f);color:var(--accent);width:100%" data-act="return-ai">Вернуть боту</button>`
           : `<button style="text-align:center;font:500 13px/1 var(--f);color:var(--muted4);width:100%" data-act="client-card">Карточка клиента</button>`}
 </div>`;
 };
-const stageName = s => ({new:'New',interested:'Interested',inprogress:'In progress',customer:'Customer'}[s] || 'New');
+const stageName = s => ({new:'новый',interested:'интересуется',inprogress:'в работе',customer:'купил'}[s] || 'новый');
 function meName(){
   if(NET.me && NET.me.name) return NET.me.name.split(' ')[0];
   const u = TG && TG.initDataUnsafe && TG.initDataUnsafe.user;
@@ -1303,17 +1315,17 @@ function chatMsgs(d){
     if(dd !== day){ day = dd; out += `<div style="align-self:center;font:500 11px/1 var(--m);letter-spacing:.08em;color:var(--muted5)">${dayLabel(m.ts)}</div>`; }
     if(m.r === 'sys') return out + `<div class="bub sys">${esc(m.t)}</div>`;
     if(m.r === 'user') return out + `<div class="bub in">${esc(m.t)}</div>`;
-    const who = m.r === 'human' ? (m.who || meName()) : 'AI';
+    const who = m.r === 'human' ? (m.who || meName()) : 'Бот';
     const tag = m.followUp ? ' · напоминание' : '';
     return out + `<div class="bub out">${esc(m.t)}</div><div class="meta" style="align-self:flex-end">${esc(who)} · ${hhmm(m.ts||now())}${tag}</div>`;
   }).join('');
 }
 function dayLabel(ts){
   const d = new Date(ts||now()), t = new Date();
-  if(d.toDateString() === t.toDateString()) return 'СЕГОДНЯ';
+  if(d.toDateString() === t.toDateString()) return 'сегодня';
   const y = new Date(t - 864e5);
-  if(d.toDateString() === y.toDateString()) return 'ВЧЕРА';
-  return d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'}).toUpperCase();
+  if(d.toDateString() === y.toDateString()) return 'вчера';
+  return d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
 }
 MOUNT.chat = el => {
   const d = S.dialogs.find(x=>x.id===S.openChat);
@@ -1369,7 +1381,7 @@ function simulateIncoming(d, text){
     const r = aiReply(text);
     if(r.handoff){
       d.msgs.push({ r:'ai', t:r.text, ts:now() });
-      d.msgs.push({ r:'sys', t:'AI передал диалог: ' + r.reason, ts:now() });
+      d.msgs.push({ r:'sys', t:'Бот передал диалог: ' + r.reason, ts:now() });
       d.status = 'attention'; S.counters.handed++;
       haptic('warn');
     } else {
@@ -1389,10 +1401,10 @@ VIEWS.clients = () => {
   if(clientFilter !== 'all') list = list.filter(d=>d.stage===clientFilter);
   return `
 <div class="body"><div class="pad-core g16">
-  <div class="between" style="align-items:baseline"><div class="h3">Clients</div>
+  <div class="between" style="align-items:baseline"><div class="h3">Клиенты</div>
     <div class="cap" style="font-size:13px">${nf(NET.on ? S.dialogs.length : 304 + S.dialogs.length)} всего</div></div>
   <div class="row g7 wrap">
-    ${[['all','Все',0],['new','New',st.new],['interested','Interested',st.interested],['customer','Customer',st.customer]]
+    ${[['all','Все',0],['new','Новые',st.new],['interested','Интересуются',st.interested],['customer','Купили',st.customer]]
       .map(([k,l,n])=>`<button class="chip${clientFilter===k?' on':''}" data-act="cl-filter" data-f="${k}">${l}${n?' '+n:''}</button>`).join('')}
   </div>
   <div class="col g10">${list.length
@@ -1409,13 +1421,13 @@ function clientBig(d){
       <div class="f1 col g4"><div class="h5">${esc(d.full)}</div>
         <div style="font:500 13px/1 var(--m);color:var(--muted4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${[d.un ? '@' + esc(d.un) : '', esc(d.phone)].filter(Boolean).join(' · ') || 'контактов пока нет'}</div></div>
       <div class="col g4" style="align-items:flex-end">
-        <div class="badge none ${d.stage==='customer'?'ok':d.stage==='interested'?'att':d.stage==='inprogress'?'human':'ai'}">${stageName(d.stage).toUpperCase()}</div>
+        <div class="badge none ${d.stage==='customer'?'ok':d.stage==='interested'?'att':d.stage==='inprogress'?'human':'ai'}">${stageName(d.stage)}</div>
         ${tempBadge(d.temperature)}
       </div>
     </div>
     <div style="background:var(--card);border:1px solid var(--accent-b);border-radius:13px;padding:12px;display:flex;flex-direction:column;gap:6px">
       <div class="row g6"><div style="width:5px;height:5px;border-radius:3px;background:var(--accent)"></div>
-        <div style="font:600 11px/1 var(--m);letter-spacing:.08em;color:var(--accent-d)">AI SUMMARY</div></div>
+        <div style="font:500 12px/1 var(--f);color:var(--accent-d)">Что понял бот</div></div>
       <div style="font:400 13px/1.45 var(--f);color:var(--ink2)">${esc(d.summary)}</div>
     </div>
     ${d.objection ? `<div class="box plain" style="border-radius:13px;padding:12px;display:flex;gap:9px;align-items:flex-start;border-color:var(--accent-b)">
@@ -1439,7 +1451,7 @@ function clientSmall(d){
     <div class="av" style="width:40px;height:40px;border-radius:13px;font-size:13px">${esc(initials(d.full))}</div>
     <div class="f1 col g4" style="text-align:left;min-width:0"><div style="font:600 15px/1 var(--f);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.full)}</div>
       <div class="cap" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.interest)}</div></div>
-    <div class="badge none ${d.stage==='customer'?'ok':d.stage==='interested'?'att':d.stage==='inprogress'?'human':'ai'}">${stageName(d.stage).toUpperCase()}</div>
+    <div class="badge none ${d.stage==='customer'?'ok':d.stage==='interested'?'att':d.stage==='inprogress'?'human':'ai'}">${stageName(d.stage)}</div>
   </button>`;
 }
 
@@ -1452,30 +1464,27 @@ VIEWS.knowledge = () => {
   if(!S.knowledge.some(k=>k.kind==='faq'&&k.ready))   gaps.push('частые вопросы');
   return `
 <div class="body"><div class="pad-core">
-  <div class="col g8"><div class="h3">Что должен знать ваш AI?</div>
-    <div class="sub-s">Чем больше материалов, тем точнее ответы. Обновляется сразу.</div></div>
-  <div class="box" style="display:flex;align-items:center;gap:14px">
-    <div class="ring" style="--p:${p}%"></div>
-    <div class="f1 col g4"><div style="font:600 15px/1 var(--f)">База заполнена на ${p}%</div>
-      <div class="cap" style="font-size:13px">${gaps.length ? 'Добавьте ' + gaps.slice(0,2).join(' и ') : 'Всё основное на месте'}</div>
-      ${NET.on && NET.quota && NET.quota.kbLimit ? `<div class="cap2">${nf(NET.quota.kbUsed)} из ${nf(NET.quota.kbLimit)} знаков</div>` : ''}</div>
-  </div>
+  <div class="col g8"><div class="h3">Что знает бот</div>
+    <div class="sub-s">Отвечает он только по этим материалам. Чего здесь нет — передаст вам.</div></div>
+  ${gaps.length ? `<div style="font:400 14px/1.5 var(--f);color:var(--ink2)">
+    Пока не хватает: ${gaps.join(', ')}. Без этого бот будет звать вас на каждый такой вопрос.
+  </div>` : S.knowledge.length ? `<div style="font:400 14px/1.5 var(--f);color:var(--ink2)">
+    Основное на месте: цены, условия и частые вопросы бот знает.
+  </div>` : ''}
   <div class="col g10">
-    ${S.knowledge.length ? S.knowledge.map((k,i)=>`
+    ${!S.knowledge.length ? '' : S.knowledge.map((k,i)=>`
       <button class="box plain" style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:13px;width:100%" data-act="kb-open" data-i="${i}">
         <div class="av ${k.ready?'warm':''}" style="width:38px;height:38px;border-radius:12px;font-size:10px">${esc(k.badge)}</div>
         <div class="f1 col g4" style="text-align:left"><div style="font:600 15px/1 var(--f)">${esc(k.title)}</div>
           <div class="cap2">${esc(k.meta)}</div></div>
-        <div style="font:500 12px/1 var(--m);color:${k.ready?'var(--green-d)':'var(--muted4)'}">${k.ready?'ГОТОВО':'ЧЕРНОВИК'}</div>
-      </button>`).join('') : `<div class="box plain" style="border-radius:18px;padding:22px;text-align:center">
-        <div class="cap">Пока пусто. Добавьте первый источник ниже.</div></div>`}
+        <div style="font:400 12px/1 var(--f);color:${k.ready?'var(--muted4)':'var(--accent-d)'}">${k.ready?'':'черновик'}</div>
+      </button>`).join('')}
   </div>
-  <div class="col g9"><div class="lbl">Добавить</div>
+  <div class="col g9"><div class="lbl">${S.knowledge.length ? 'Добавить ещё' : 'С чего начать'}</div>
     ${NET.on ? `<button class="box" style="border-radius:18px;display:flex;align-items:center;gap:13px;width:100%;text-align:left" data-act="kb-split">
-      <div class="av warm" style="width:38px;height:38px;border-radius:12px">${I.spark('#F26722',18)}</div>
       <div class="f1 col g4">
-        <div style="font:600 15px/1.2 var(--f)">Вставить всё сразу</div>
-        <div class="cap2">Один текст — сами разложим на прайс, доставку и остальное</div>
+        <div style="font:600 15px/1.2 var(--f)">Вставить всё одним текстом</div>
+        <div class="cap2">Прайс, доставка и гарантия вперемешку — разложим по разделам</div>
       </div>
       <div style="color:#C4C8CD;font:400 18px/1 var(--f)">›</div>
     </button>` : ''}
@@ -1606,7 +1615,7 @@ ${topbar('Материал','')}
     <div class="seg">${KIND_SEG.map(([kk,l])=>`<button class="${k.kind===kk?'on':''}" data-act="ke-kind" data-k="${kk}">${l}</button>`).join('')}</div></div>
   <div class="field"><div class="lbl">Текст</div>
     <div class="inp"><textarea id="ke-body" rows="14">${esc(k.body||'')}</textarea></div>
-    <div class="hint" id="ke-note">${chars((k.body||'').length)}. AI видит их при каждом ответе.</div></div>
+    <div class="hint" id="ke-note">${chars((k.body||'').length)}. Бот читает их при каждом ответе.</div></div>
   <div class="push col g10" style="padding-top:16px">
     <button class="btn" id="ke-save" ${k.busy?'disabled':''}>${k.busy?'Сохраняю…':'Сохранить'}</button>
     <button class="link" style="color:#C93A3A" data-act="ke-del">Удалить материал</button>
@@ -1620,7 +1629,7 @@ MOUNT.kbedit = el => {
   title.addEventListener('input', () => { k.title = title.value; });
   body.addEventListener('input', () => {
     k.body = body.value;
-    note.textContent = chars(k.body.length) + '. AI видит их при каждом ответе.';
+    note.textContent = chars(k.body.length) + '. Бот читает их при каждом ответе.';
   });
   $('#ke-save', el).addEventListener('click', async () => {
     if(!k.title.trim()){ toast('Дайте материалу название'); title.focus(); return; }
@@ -1702,16 +1711,15 @@ async function loadFunnel(){
 function voiceCard(){
   const p = S.ai.styleProfile;
   if(!p) return `<button class="box" style="border-radius:18px;display:flex;align-items:center;gap:13px;width:100%;text-align:left" data-act="style-train">
-    <div class="av warm" style="width:38px;height:38px;border-radius:12px">${I.spark('#F26722',18)}</div>
     <div class="f1 col g4">
-      <div style="font:600 15px/1.2 var(--f)">Научить AI писать как вы</div>
+      <div style="font:600 15px/1.2 var(--f)">Научить бота писать как вы</div>
       <div class="cap2">Ответите клиенту пару раз — снимем вашу манеру</div>
     </div>
     <div style="color:#C4C8CD;font:400 18px/1 var(--f)">›</div>
   </button>`;
   return `<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:11px">
     <div class="between">
-      <div class="row g8">${I.spark('#F26722',16)}<div style="font:600 14px/1 var(--f)">Ваш голос</div></div>
+      <div style="font:600 14px/1 var(--f)">Ваша манера</div>
       <button class="a" style="font-size:12px" data-act="style-train">Обновить</button>
     </div>
     <div style="font:400 13px/1.45 var(--f);color:var(--ink2)">${esc(p.summary)}</div>
@@ -1735,7 +1743,7 @@ ${topbar('Ваш голос', '')}
   <div class="pad g18">
     <div class="col g8">
       <div class="h2">Ответьте клиенту сами</div>
-      <div class="sub">AI сыграет покупателя, а вы отвечайте как обычно отвечаете вы. По вашим ответам разберём манеру и научим бота писать так же.</div>
+      <div class="sub">Бот сыграет покупателя, а вы отвечайте как обычно отвечаете вы. По вашим ответам разберём манеру и научим бота писать так же.</div>
     </div>
     <div class="col g9">
       <div class="lbl">Какой клиент напишет</div>
@@ -1817,10 +1825,10 @@ async function trainSend(){
 
 VIEWS.aiset = () => `
 <div class="body"><div class="pad-core g16">
-  <div class="between"><div class="h3">AI Settings</div>
-    ${S.ai.paused?`<div class="badge att">НА ПАУЗЕ</div>`:`<div class="pill-live"><div class="dot"></div>ACTIVE</div>`}</div>
+  <div class="between"><div class="h3">Как отвечает бот</div>
+    ${S.ai.paused?`<div class="badge att">на паузе</div>`:`<div class="pill-live"><div class="dot"></div>отвечает</div>`}</div>
   <div class="col g12">
-    <div class="field"><div class="lbl">Имя AI-менеджера</div>
+    <div class="field"><div class="lbl">Как зовут бота</div>
       <div class="inp"><input id="aiName" value="${esc(S.ai.name)}" placeholder="Ника"></div></div>
     ${NET.on ? voiceCard() : ''}
     <div class="row g10" style="align-items:stretch">
@@ -1836,10 +1844,10 @@ VIEWS.aiset = () => `
         <input type="range" min="5" max="95" value="${S.ai.lengthVal}" id="lenRange"></div>
     </div>
     <div class="field"><div class="lbl">Инструкции</div>
-      <div class="inp"><textarea id="aiInstr" rows="3" placeholder="Что AI должен всегда уточнять или предлагать">${esc(S.ai.instructions)}</textarea></div></div>
+      <div class="inp"><textarea id="aiInstr" rows="3" placeholder="Что боту всегда уточнять или предлагать">${esc(S.ai.instructions)}</textarea></div></div>
     <div class="col g9"><div class="lbl">Запрещённые темы</div>
       <div class="row wrap g7" id="banned">${bannedChips()}</div></div>
-    <div class="col g9"><div class="lbl">AI может сам</div>
+    <div class="col g9"><div class="lbl">Что боту разрешено</div>
       <div class="list" style="padding:4px 14px">
         ${[['canProducts','Отвечать о товарах и ценах'],['canContacts','Собирать телефон и имя'],['canDiscount','Давать скидки']].map(([k,l])=>
           `<div class="between" style="padding:13px 0"><div style="font:500 15px/1 var(--f)">${l}</div>
@@ -1984,7 +1992,7 @@ VIEWS.analytics = () => {
   const topics = NET.on ? realTopics() : [['Наличие и цены',38],['Доставка',26],['Подбор под задачу',19],['Счёт и документы',11]];
   return `
 <div class="body"><div class="pad-core">
-  <div class="between"><div class="h3">Analytics</div>
+  <div class="between"><div class="h3">Отчёты</div>
     <button class="chip" data-act="pick-period">${S.period} дней ▾</button></div>
   <div class="darkcard">
     <div style="font:400 13px/1 var(--f);color:var(--dark-mut)">Messages</div>
@@ -1995,10 +2003,10 @@ VIEWS.analytics = () => {
     <div class="bars">${p.bars.map(h=>`<i class="${h===peak?'on':''}" style="height:${h}%"></i>`).join('')}</div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-    ${[['New clients',p.cl, NET.on ? 'за ' + S.period + ' дней' : '+'+Math.round(p.cl/9)+' за неделю','var(--green-d)'],
-       ['AI resolution rate',p.rate+'%', NET.on ? 'решено без человека' : '+3 п.п.','var(--green-d)'],
-       ['Human handoffs',p.hand,Math.round(100-p.rate)+'% диалогов','var(--muted4)'],
-       ['Response time', NET.on ? p.avg : '1.4с', NET.on ? 'среднее время ответа AI' : 'AI · человек 6 мин','var(--muted4)']]
+    ${[['Новые клиенты',p.cl, NET.on ? 'за ' + S.period + ' дней' : '+'+Math.round(p.cl/9)+' за неделю','var(--green-d)'],
+       ['Бот справился сам',p.rate+'%', NET.on ? 'без вашего участия' : '+3 п.п.','var(--green-d)'],
+       ['Передал вам',p.hand,Math.round(100-p.rate)+'% разговоров','var(--muted4)'],
+       ['Время ответа', NET.on ? p.avg : '1.4с', 'в среднем у бота','var(--muted4)']]
       .map(([t,v,d,c])=>`<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:7px">
         <div class="cap2" style="color:var(--muted3)">${t}</div>
         <div style="font:600 24px/1 var(--m)">${nf(v)}</div>
@@ -2012,7 +2020,7 @@ VIEWS.analytics = () => {
       <div style="width:34px;text-align:right;font:500 13px/1 var(--m);color:var(--muted3)">${v}%</div>
     </div>`).join('')}</div>
   </div>
-  ${p.hand ? `<div class="box warm" style="border-radius:16px">Передач человеку: ${p.hand}. Посмотрите причины в Inbox — частые вопросы стоит добавить в Knowledge, чтобы AI отвечал сам.</div>` : ''}
+  ${p.hand ? `<div class="box warm" style="border-radius:16px">Передач человеку: ${p.hand}. Посмотрите причины в Inbox — частые вопросы стоит добавить в материалы, чтобы бот отвечал сам.</div>` : ''}
 </div></div>
 ${tabbar('more')}`;
 };
@@ -2021,14 +2029,14 @@ ${tabbar('more')}`;
 let channelPost = null, channelTopic = 'Новая коллекция торшеров, скидка 10%', channelKind = 'Анонс';
 VIEWS.channel = () => `
 <div class="body"><div class="pad-core g16">
-  <div class="col g7"><div class="h3">Channel</div>
-    <div class="sub-s">AI напишет пост для @${esc((S.bot.username||'my_bot').replace('_bot','_channel'))} — вы отредактируете и опубликуете.</div></div>
+  <div class="col g7"><div class="h3">Канал</div>
+    <div class="sub-s">Бот напишет пост для @${esc((S.bot.username||'my_bot').replace('_bot','_channel'))} — вы отредактируете и опубликуете.</div></div>
   <div class="col g9"><div class="lbl">О чём пост</div>
     <div class="inp"><input id="chTopic" value="${esc(channelTopic)}" placeholder="Например: новая коллекция, скидка 10%"></div>
     <div class="row wrap g7">
       ${['Анонс','Кейс','Совет','Акция'].map(k=>`<button class="chip${channelKind===k?' on':''}" data-act="ch-kind" data-k="${k}">${k}</button>`).join('')}
     </div></div>
-  <button class="btn tint" data-act="ch-gen">${I.spark()} Предложить текст</button>
+  <button class="btn tint" data-act="ch-gen">Предложить текст</button>
   <div class="col g9">
     <div class="between" style="align-items:baseline"><div class="lbl">Preview</div>
       <button class="a" style="font-size:12px" data-act="ch-gen">Ещё вариант</button></div>
@@ -2074,21 +2082,21 @@ MOUNT.channel = el => {
 /* ---------- More menu ---------- */
 VIEWS.more = () => `
 <div class="body"><div class="pad-core">
-  <div class="h3">More</div>
+  <div class="h3">Ещё</div>
   <div class="box" style="border-radius:20px;padding:18px;display:flex;align-items:center;gap:13px">
     <div class="av warm" style="width:46px;height:46px;border-radius:15px;font-size:15px">${esc(initials(S.bot.name))}</div>
     <div class="f1 col g4" style="min-width:0"><div class="h5" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.biz.name || S.bot.name)}</div>
-      <div style="font:500 13px/1 var(--m);color:var(--muted3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@${esc(S.bot.username)} · Pro</div></div>
-    ${S.ai.paused?`<div class="badge att">PAUSED</div>`:`<div class="pill-live"><div class="dot"></div>ACTIVE</div>`}
+      <div style="font:500 13px/1 var(--m);color:var(--muted3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@${esc(S.bot.username)}</div></div>
+    ${S.ai.paused?`<div class="badge att">на паузе</div>`:`<div class="pill-live"><div class="dot"></div>отвечает</div>`}
   </div>
   <div class="list plain">
-    ${[['knowledge','Knowledge', S.knowledge.length + ' ' + plural(S.knowledge.length,'источник','источника','источников') + ' · ' + kbPercent() + '%'],
-       ['team','Team', S.team.length + ' ' + plural(S.team.length,'менеджер','менеджера','менеджеров') + ' · ' + S.depts.length + ' ' + plural(S.depts.length,'отдел','отдела','отделов')],
-       ['channel','Channel','Beta','NEW'],
-       ['analytics','Analytics',''],
-       ['billing','Billing','Pro · до 12 сентября'],
-       ['settings','Settings','']]
-      .concat(NET.admin ? [['funnel','Воронка','Только для вас','SERVICE']] : [])
+    ${[['knowledge','Материалы', S.knowledge.length + ' ' + plural(S.knowledge.length,'материал','материала','материалов')],
+       ['team','Команда', S.team.length + ' ' + plural(S.team.length,'человек','человека','человек')],
+       ['channel','Канал','пока в бете'],
+       ['analytics','Отчёты',''],
+       ['billing','Оплата','Pro · до 12 сентября'],
+       ['settings','Настройки','']]
+      .concat(NET.admin ? [['funnel','Воронка','только для вас']] : [])
       .map(([k,t,d,badge])=>`
       <button class="between" style="width:100%" data-act="more-go" data-k="${k}">
         <div class="col g4" style="text-align:left"><div style="font:500 15px/1 var(--f)">${t}</div>
@@ -2097,9 +2105,9 @@ VIEWS.more = () => `
       </button>`).join('')}
   </div>
   <button class="box warm" style="border-radius:18px;display:flex;flex-direction:column;gap:9px;width:100%;text-align:left" data-act="toggle-pause">
-    <div class="between" style="width:100%"><div style="font:600 15px/1 var(--f);color:var(--accent-ink)">${S.ai.paused?'AI на паузе':'Пауза AI'}</div>
+    <div class="between" style="width:100%"><div style="font:600 15px/1 var(--f);color:var(--accent-ink)">${S.ai.paused?'Бот на паузе':'Поставить бота на паузу'}</div>
       <div class="sw ${S.ai.paused?'on':''}"><i></i></div></div>
-    <div style="font:400 13px/1.45 var(--f);color:var(--accent-ink2)">${S.ai.paused?'Все диалоги идут менеджерам. Нажмите, чтобы вернуть AI.':'Бот перестанет отвечать сам — все диалоги пойдут менеджерам.'}</div>
+    <div style="font:400 13px/1.45 var(--f);color:var(--accent-ink2)">${S.ai.paused?'Все разговоры идут вам. Нажмите, чтобы вернуть бота в работу.':'Перестанет отвечать сам — все разговоры пойдут вам и менеджерам.'}</div>
   </button>
   ${NET.on && NET.links && (NET.links.privacy || NET.links.terms || NET.links.support) ? `
   <div class="row wrap g7" style="justify-content:center;padding-top:4px">
@@ -2153,7 +2161,7 @@ function inviteSheet(name, link){
     return;
   }
   sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Пригласите ${esc(name)}</div>
-      <div class="sub-s">Отправьте ссылку — по ней менеджер подключится и начнёт получать диалоги, которые AI передал человеку.</div></div>
+      <div class="sub-s">Отправьте ссылку — по ней менеджер подключится и начнёт получать диалоги, которые Бот передал человеку.</div></div>
     <div class="box" style="border-radius:14px;font:500 13px/1.5 var(--m);word-break:break-all;color:var(--ink3)">${esc(link)}</div>
     <button class="btn" id="inv-share">Отправить в Telegram</button>
     <button class="btn ghost" id="inv-copy">Скопировать ссылку</button>`, el => {
@@ -2348,7 +2356,7 @@ const ACT = {
     const ready = S.knowledge.filter(k => k.ready).length;
     if(NET.on && !ready && !finishConfirmed){
       sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Бот пока ничего не знает</div>
-          <div class="sub-s">Вы не добавили ни одного материала. Без них AI не сможет отвечать по фактам и будет передавать вам <b>каждый</b> вопрос о товарах, ценах и доставке.</div></div>
+          <div class="sub-s">Вы не добавили ни одного материала. Без них Бот не сможет отвечать по фактам и будет передавать вам <b>каждый</b> вопрос о товарах, ценах и доставке.</div></div>
         <div class="box warm" style="border-radius:16px">Хватит пары абзацев: перечислите товары с ценами и условия доставки своими словами. Это тридцать секунд.</div>
         <button class="btn" data-act="add-knowledge-now">Добавить материалы</button>
         <button class="link" data-act="finish-anyway">Всё равно продолжить</button>`);
@@ -2378,14 +2386,14 @@ const ACT = {
       ${att.length ? `<div class="col g10">${att.map(d=>`<button class="box" style="border-radius:16px;display:flex;align-items:center;gap:12px;width:100%" data-act="chat" data-id="${d.id}">
           <div class="av warm" style="width:40px;height:40px">${esc(initials(d.full))}</div>
           <div class="f1 col g4" style="text-align:left"><div style="font:600 15px/1 var(--f)">${esc(d.name)}</div>
-            <div class="cap2">AI передал диалог · ${hhmm(d.ts)}</div></div>${I.arrow('#B6BBC1')}</button>`).join('')}</div>`
-        : `<div class="box" style="border-radius:16px;text-align:center;padding:22px"><div class="cap">Всё спокойно — AI справляется сам</div></div>`}
+            <div class="cap2">Бот передал диалог · ${hhmm(d.ts)}</div></div>${I.arrow('#B6BBC1')}</button>`).join('')}</div>`
+        : `<div class="box" style="border-radius:16px;text-align:center;padding:22px"><div class="cap">Всё спокойно — бот справляется сам</div></div>`}
       <button class="btn ghost" data-act="close-sheet">Закрыть</button>`);
   },
   'close-sheet': () => closeSheet(),
   'toggle-pause': () => {
     S.ai.paused = !S.ai.paused; save(); pushAI(); haptic(S.ai.paused ? 'warn' : 'ok');
-    toast(S.ai.paused ? 'AI на паузе — диалоги идут менеджерам' : 'AI снова отвечает клиентам');
+    toast(S.ai.paused ? 'Бот на паузе — разговоры идут вам' : 'Бот снова отвечает клиентам');
     paint(current, false);
   },
   'filter-att': () => { inboxFilter = 'attention'; S.tab = 'inbox'; stack = []; save(); go('inbox'); },
@@ -2403,10 +2411,10 @@ const ACT = {
       catch(e){ return netErr(e); }
     } else {
       d.status = 'human'; d.mgr = S.team[0] ? S.team[0].name : meName();
-      d.msgs.push({ r:'sys', t:'Диалог ведёт ' + meName() + ' — AI на паузе', ts:now() });
+      d.msgs.push({ r:'sys', t:'Диалог ведёт ' + meName() + ' — Бот на паузе', ts:now() });
       d.ts = now(); save();
     }
-    haptic('ok'); paint('chat', false); toast('Вы отвечаете клиенту. AI молчит.');
+    haptic('ok'); paint('chat', false); toast('Вы отвечаете клиенту. Бот молчит.');
   },
   'return-ai': async () => {
     const d = S.dialogs.find(x=>x.id===S.openChat); if(!d) return;
@@ -2418,7 +2426,7 @@ const ACT = {
       d.msgs.push({ r:'sys', t:'Диалог возвращён AI', ts:now() });
       d.ts = now(); save();
     }
-    haptic('ok'); paint('chat', false); toast('AI снова ведёт диалог');
+    haptic('ok'); paint('chat', false); toast('Бот снова ведёт разговор');
   },
   'client-card': () => {
     const d = S.dialogs.find(x=>x.id===S.openChat); if(!d) return;
@@ -2453,7 +2461,7 @@ const ACT = {
     const k = S.knowledge[+b.dataset.i]; if(!k) return;
     sheet(`<div class="col g8"><div class="h5" style="font-size:19px">${esc(k.title)}</div>
         <div class="sub-s">${esc(k.meta)}</div></div>
-      ${k.chars ? `<div class="box" style="border-radius:16px"><div class="cap">В базе ${nf(k.chars)} знаков — AI видит их при каждом ответе.</div></div>` : ''}
+      ${k.chars ? `<div class="box" style="border-radius:16px"><div class="cap">В базе ${nf(k.chars)} знаков — бот читает их при каждом ответе.</div></div>` : ''}
       ${(k.preview || k.body) ? `<div class="box" style="border-radius:16px;font:400 14px/1.5 var(--f);color:var(--ink3);max-height:200px;overflow:auto">${esc((k.preview || k.body).slice(0,600))}</div>` : ''}
       ${NET.on && k.id ? `<button class="btn" data-act="kb-edit" data-i="${b.dataset.i}">Изменить</button>` : ''}
       <button class="btn ghost" style="color:#C93A3A" data-act="kb-del" data-i="${b.dataset.i}">Удалить источник</button>`);
@@ -2500,7 +2508,7 @@ const ACT = {
   },
 
   /* --- ai settings --- */
-  'add-banned': () => inputSheet('Запрещённая тема','AI не будет это обсуждать','например: конкуренты','', v => {
+  'add-banned': () => inputSheet('Запрещённая тема','Бот не будет это обсуждать','например: конкуренты','', v => {
     S.ai.banned.push(v); save(); pushAI(); const n = $('#banned'); if(n) n.innerHTML = bannedChips(); renderPreview(); haptic('ok');
   }, 'Добавить'),
   'rm-banned': (b) => { S.ai.banned.splice(+b.dataset.i, 1); save(); pushAI(); const n = $('#banned'); if(n) n.innerHTML = bannedChips(); renderPreview(); haptic('sel'); },
@@ -2563,7 +2571,7 @@ const ACT = {
   },
   'save-ai': async () => {
     if(NET.on){ try { await NET.req('/api/ai', { patch: S.ai }); } catch(e){ return netErr(e); } }
-    save(); haptic('ok'); toast('Настройки применены — AI отвечает по-новому');
+    save(); haptic('ok'); toast('Настройки применены — бот отвечает по-новому');
   },
 
   /* --- analytics --- */
@@ -2619,12 +2627,12 @@ const ACT = {
           <div class="cap">Считается на вашем сервере. Стоимость смотрите в консоли Groq — тарификация по токенам.</div>`
         : `<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:10px">
             <div class="between"><div style="font:600 16px/1 var(--f)">Демо-режим</div><div class="badge ai">OFFLINE</div></div>
-            <div class="cap">Приложение открыто без сервера — расход AI считать нечего.</div>
+            <div class="cap">Приложение открыто без сервера — расход модели считать нечего.</div>
           </div>`}
         <button class="btn ghost" data-act="close-sheet">Закрыть</button>`);
       return;
     }
-    sheet(`<div class="h5" style="font-size:19px">Settings</div>
+    sheet(`<div class="h5" style="font-size:19px">Настройки</div>
       <div class="list plain" style="padding:0 16px">
         <div class="between"><div style="font:500 15px/1 var(--f)">Бот</div><div class="cap">${S.bot.username ? '@' + esc(S.bot.username) : 'не подключён'}</div></div>
         ${S.bot.mask ? `<div class="between"><div style="font:500 15px/1 var(--f)">Токен</div><div class="cap" style="font-family:var(--m)">${esc(S.bot.mask)}</div></div>` : ''}
@@ -2696,7 +2704,7 @@ const ACT = {
   },
   restart: () => {
     sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Пройти настройку заново?</div>
-        <div class="sub-s">Диалоги и клиенты сохранятся. Настройки бота и AI можно будет изменить.</div></div>
+        <div class="sub-s">Диалоги и клиенты сохранятся. Настройки бота можно будет изменить.</div></div>
       <button class="btn" data-act="restart-ok">Начать заново</button>
       <button class="link" data-act="close-sheet">Отмена</button>`);
   },
@@ -2709,7 +2717,7 @@ const ACT = {
  * С бэкендом текст реально уходит на сервер и попадает в промпт AI:
  * можно вставить текст, приложить текстовый файл (txt/md/csv/json) или дать ссылку.
  */
-const KB_KIND_TITLE = { text:'Текст для AI', doc:'Документ', price:'Товары и цены', rules:'Правила', faq:'Частые вопросы', web:'Ссылка' };
+const KB_KIND_TITLE = { text:'Текст для бота', doc:'Документ', price:'Товары и цены', rules:'Правила', faq:'Частые вопросы', web:'Ссылка' };
 const KB_KIND_HINT = () => ({
   text:  'Что важно знать про вашу работу: график, самовывоз, гарантии.',
   doc:   NET.on ? 'Приложите PDF, DOCX или вставьте текст документа.'
@@ -2799,7 +2807,7 @@ function kbSheet(kind){
         save(); haptic('ok'); paint('knowledge', false); return;
       }
       try { const r = await NET.req('/api/knowledge/add', { kind, title: t, body }); S.knowledge = r.knowledge; save(); haptic('ok');
-        toast('AI переобучен на этом источнике'); paint('knowledge', false); }
+        toast('Бот учтёт этот материал'); paint('knowledge', false); }
       catch(e){ netErr(e); }
     });
   });
@@ -2852,7 +2860,7 @@ async function init(){
       const r = await NET.req('/api/state', {});
       NET.me = r.me; NET.admin = !!r.admin; NET.ready = true;
       applyState(r.state);
-      // Диплинк из уведомления «AI передал диалог»: t.me/bot?startapp=d<chatId>
+      // Диплинк из уведомления «Бот передал диалог»: t.me/bot?startapp=d<chatId>
       const start = (TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param) || '';
       const wantChat = /^d(-?\d+)$/.exec(start);
       let view = S.onboarded ? (VIEWS[S.view] && !ONB.includes(S.view) ? S.view : 'home')
