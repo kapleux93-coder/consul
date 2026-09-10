@@ -566,6 +566,41 @@ function makeDocx(text) {
     }
   });
 
+  await t('бот сам сообщает Telegram id для ADMIN_IDS', async () => {
+    // Иначе за собственным id приходится идти к чужому боту, хотя свой видит
+    // его в каждом сообщении.
+    const marks = [];
+    const real = tg.sendMessage;
+    tg.sendMessage = async (token, chatId, text) => { marks.push(text); return { message_id: 1 }; };
+    try {
+      await require('./server').handlePlatformUpdate({ message: {
+        chat: { id: 4242, type: 'private' }, from: { id: 4242, first_name: 'Анна' },
+        text: '/id', date: Math.floor(Date.now() / 1000),
+      } });
+    } finally { tg.sendMessage = real; }
+    assert.ok(marks.length, 'бот ответил');
+    assert.ok(/4242/.test(marks[0]), 'id в ответе: ' + marks[0]);
+    assert.ok(/ADMIN_IDS/.test(marks[0]), 'сказано, куда его вписать');
+  });
+
+  await t('уже вписанному в ADMIN_IDS бот об этом и говорит', async () => {
+    const saved = process.env.ADMIN_IDS;
+    process.env.ADMIN_IDS = '4242';
+    const marks = [];
+    const real = tg.sendMessage;
+    tg.sendMessage = async (token, chatId, text) => { marks.push(text); return { message_id: 1 }; };
+    try {
+      await require('./server').handlePlatformUpdate({ message: {
+        chat: { id: 4242, type: 'private' }, from: { id: 4242, first_name: 'Анна' },
+        text: '/id', date: Math.floor(Date.now() / 1000),
+      } });
+    } finally {
+      tg.sendMessage = real;
+      if (saved === undefined) delete process.env.ADMIN_IDS; else process.env.ADMIN_IDS = saved;
+    }
+    assert.ok(/уже в ADMIN_IDS/.test(marks[0]), marks[0]);
+  });
+
   await t('приглашение менеджера отдаёт рабочую ссылку', async () => {
     const r = await api('/api/team/invite', { name: 'Дмитрий Морозов', un: 'dmitry_m', dept: 'Support' });
     assert.strictEqual(r.status, 200);
