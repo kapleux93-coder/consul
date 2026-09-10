@@ -152,6 +152,12 @@ async function chat(opts) {
     temperature: opts.temperature == null ? 0.4 : opts.temperature,
     max_tokens: opts.maxTokens || 700,
   };
+  /* gpt-oss — рассуждающая модель: по умолчанию она тратит на внутренние
+   * размышления втрое больше токенов, чем на сам ответ (замер: 306 из 400).
+   * Это бьёт дважды — съедает минутный лимит и вытесняет JSON за границу
+   * бюджета, из-за чего запрос падает с json_validate_failed. Для ответа
+   * клиенту по готовым фактам глубокие рассуждения не нужны. */
+  if (opts.reasoning) body.reasoning_effort = opts.reasoning;
   if (opts.json) body.response_format = { type: 'json_object' };
   let data;
   try {

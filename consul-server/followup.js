@@ -125,7 +125,7 @@ async function compose(w, d, hint = {}) {
   const out = await groq.chat({
     system: sys,
     messages: [{ role: 'user', content: 'Напиши напоминание.' }],
-    json: true, maxTokens: 160, temperature: 0.7,
+    json: true, maxTokens: 160, temperature: 0.7, reasoning: 'low',
   });
   const p = groq.extractJson(out.text);
   const text = String((p && p.text) || out.text || '').replace(/\s+/g, ' ').trim();

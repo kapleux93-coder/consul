@@ -10,7 +10,8 @@ const t = async (name, fn) => { await fn(); n++; console.log('  ✓ ' + name); }
 /* ---- заглушка Groq ---- */
 const seen = [];
 let models = ['whisper-large-v3', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
-let nextStatus = 200, nextBody = null, rejectJsonMode = false, failTimes = 0;
+let nextStatus = 200, nextBody = null, rejectJsonMode = false, failTimes = 0, nextError = null;
+let badJsonOnce = false;      // один отказ «JSON не собрался», как у живой модели
 
 const stub = http.createServer((req, res) => {
   let raw = '';
@@ -28,7 +29,8 @@ const stub = http.createServer((req, res) => {
       return res.end(JSON.stringify({ error: { message: 'response_format json_object is not supported by this model' } }));
     }
     if (failTimes > 0) { failTimes--; res.writeHead(429, { 'retry-after': '0' }); return res.end('rate limited'); }
-    if (nextStatus !== 200) { res.writeHead(nextStatus); return res.end('boom'); }
+    if (badJsonOnce) { badJsonOnce = false; res.writeHead(400); return res.end('Failed to validate JSON. json_validate_failed'); }
+    if (nextStatus !== 200) { res.writeHead(nextStatus); return res.end(nextError || 'boom'); }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(nextBody || {
       choices: [{ message: { content: '{"reply":"Торшер Lumen Arc — 12 400 ₽.","handoff":false}' } }],
@@ -149,6 +151,32 @@ const stub = http.createServer((req, res) => {
     assert.strictEqual(g.extractJson('просто текст'), null);
     assert.strictEqual(g.extractJson(''), null);
     assert.strictEqual(g.extractJson('{сломано}'), null);
+  });
+
+  await t('глубину рассуждений передаём модели, когда просим', async () => {
+    // gpt-oss по умолчанию тратит на размышления втрое больше токенов, чем на
+    // ответ, и вытесняет JSON за границу бюджета. Для ответа по готовым фактам
+    // это лишнее.
+    seen.length = 0;
+    await g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }], reasoning: 'low' });
+    assert.strictEqual(seen[0].body.reasoning_effort, 'low');
+
+    seen.length = 0;
+    await g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }] });
+    assert.ok(!('reasoning_effort' in seen[0].body), 'без просьбы не навязываем');
+  });
+
+  await t('оборванный JSON не уводит диалог к человеку, а повторяется с запасом', async () => {
+    // Самая частая поломка на живой модели: ответ не влез в токены, Groq
+    // ответил json_validate_failed, и разговор ушёл менеджеру без причины.
+    badJsonOnce = true;
+    seen.length = 0;
+    const r = await g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }], json: true, maxTokens: 400 });
+    assert.ok(r.text, 'ответ всё-таки получен');
+    assert.strictEqual(seen.length, 2, 'ровно одна повторная попытка');
+    assert.ok(seen[0].body.response_format, 'первая — в json-режиме');
+    assert.ok(!seen[1].body.response_format, 'вторая — без него');
+    assert.ok(seen[1].body.max_tokens > seen[0].body.max_tokens, 'и с запасом по токенам');
   });
 
   await t('ключ читается при вызове, а не при загрузке модуля', () => {

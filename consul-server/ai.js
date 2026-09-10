@@ -247,7 +247,7 @@ async function reply(w, dialog, question) {
   try {
     /* 600 не хватало: кроме самого ответа модель заполняет восемь служебных
      * полей, и на длинной реплике JSON обрывался на середине. */
-    out = await groq.chat({ system: sysFinal, messages: msgs, json: true, maxTokens: 900, temperature: 0.4 });
+    out = await groq.chat({ system: sysFinal, messages: msgs, json: true, maxTokens: 900, temperature: 0.4, reasoning: 'low' });
   } catch (e) {
     console.error('[ai] groq: ' + e.message);
     return offline(w, e.message);
@@ -325,7 +325,7 @@ async function channelPost(w, topic, kind) {
   const out = await groq.chat({
     system: sys,
     messages: [{ role: 'user', content: `Формат: ${kind || 'Анонс'}. Тема: ${topic}` }],
-    json: true, maxTokens: 500, temperature: 0.8,
+    json: true, maxTokens: 500, temperature: 0.8, reasoning: 'low',
   });
   const p = groq.extractJson(out.text);
   return { text: clean((p && p.text) || out.text).slice(0, 2000), model: out.model, usage: out.usage };
@@ -376,7 +376,7 @@ async function customerMessage(w, history, scenarioId) {
     .filter(m => m.content);
   if (!msgs.length) msgs.push({ role: 'user', content: '(начни разговор первым сообщением)' });
 
-  const out = await groq.chat({ system: sys, messages: msgs, json: true, maxTokens: 200, temperature: 0.9 });
+  const out = await groq.chat({ system: sys, messages: msgs, json: true, maxTokens: 200, temperature: 0.9, reasoning: 'low' });
   const p = groq.extractJson(out.text);
   return {
     message: clean((p && p.message) || out.text).slice(0, 400) || 'Здравствуйте! Подскажите, пожалуйста.',
@@ -447,7 +447,7 @@ async function split(text) {
   const out = await groq.chat({
     system: sys,
     messages: [{ role: 'user', content: 'Текст:\n' + numbered }],
-    json: true, maxTokens: 900, temperature: 0.1,
+    json: true, maxTokens: 900, temperature: 0.1, reasoning: 'low',
   });
 
   const p = groq.extractJson(out.text);
