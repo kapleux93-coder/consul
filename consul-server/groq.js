@@ -161,6 +161,15 @@ async function chat(opts) {
     if (opts.json && /response_format|json_object/i.test(e.message)) {
       delete body.response_format;
       data = await request('/chat/completions', { method: 'POST', body: JSON.stringify(body) });
+    } else if (opts.json && /json_validate_failed|Failed to (validate|generate) JSON/i.test(e.message)) {
+      /* Модель не уложила JSON в отведённые токены или выдала пустоту. На живом
+       * прогоне это случалось на каждом втором ответе, и каждый такой отказ
+       * уводил разговор менеджеру — то есть половина диалогов уходила человеку
+       * без всякой причины. Даём вторую попытку с запасом по токенам; разбирать
+       * ответ, обёрнутый в текст, extractJson всё равно умеет. */
+      body.max_tokens = Math.min((body.max_tokens || 700) * 2, 2000);
+      delete body.response_format;
+      data = await request('/chat/completions', { method: 'POST', body: JSON.stringify(body) });
     } else throw e;
   }
   const choice = (data.choices || [])[0] || {};

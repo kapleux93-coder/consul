@@ -245,7 +245,9 @@ async function reply(w, dialog, question) {
 
   let out;
   try {
-    out = await groq.chat({ system: sysFinal, messages: msgs, json: true, maxTokens: 600, temperature: 0.4 });
+    /* 600 не хватало: кроме самого ответа модель заполняет восемь служебных
+     * полей, и на длинной реплике JSON обрывался на середине. */
+    out = await groq.chat({ system: sysFinal, messages: msgs, json: true, maxTokens: 900, temperature: 0.4 });
   } catch (e) {
     console.error('[ai] groq: ' + e.message);
     return offline(w, e.message);
@@ -367,7 +369,11 @@ async function customerMessage(w, history, scenarioId) {
     'Ответ — один JSON: {"message":"твоя реплика","done":false}',
   ].filter(Boolean).join('\n');
 
-  const msgs = history.map(m => ({ role: m.r === 'client' ? 'assistant' : 'user', content: m.t }));
+  // Реплики без текста отбрасываем: Groq отвечает на такое 400, и вместо
+  // разговора владелец видит ошибку сети.
+  const msgs = history
+    .map(m => ({ role: m.r === 'client' ? 'assistant' : 'user', content: clean(m && m.t, 600) }))
+    .filter(m => m.content);
   if (!msgs.length) msgs.push({ role: 'user', content: '(начни разговор первым сообщением)' });
 
   const out = await groq.chat({ system: sys, messages: msgs, json: true, maxTokens: 200, temperature: 0.9 });

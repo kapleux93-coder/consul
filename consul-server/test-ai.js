@@ -1,7 +1,11 @@
 'use strict';
 /* Тест сборки промпта и отбора знаний. Сеть не трогаем: Groq тут не нужен. */
 process.env.CONSUL_DATA_DIR = require('path').join(require('os').tmpdir(), 'consul-test-ai-' + process.pid);
-delete process.env.GROQ_API_KEY;
+/* Пустая строка, а не delete: groq.js подключает config.js, тот читает .env, и
+ * настоящий ключ из файла разработчика снова оказался бы в окружении — тест
+ * пошёл бы в сеть вместо проверки фолбэка. Заданная пустая переменная .env
+ * уже не перезаписывает. */
+process.env.GROQ_API_KEY = '';
 
 const assert = require('assert');
 const fs = require('fs');
@@ -168,6 +172,26 @@ t('lengthKey берётся из ползунка, если length не зада
   assert.ok(/менеджера/.test(r.reply), 'клиент видит честную фразу');
   assert.ok(!/12 400/.test(r.reply), 'никаких придуманных цен');
   n++; console.log('  ✓ без GROQ_API_KEY не выдумывает ответ, а зовёт человека');
+
+  console.log('ai / тренировка стиля');
+
+  {
+    // Groq отвечает 400 на сообщение без content, и владелец вместо разговора
+    // с «покупателем» видит ошибку сети. Пустые реплики выбрасываем до отправки.
+    const groq = require('./groq');
+    const real = groq.chat;
+    let sent = null;
+    groq.chat = async o => { sent = o.messages; return { text: '{"message":"ок","done":false}', usage: {} }; };
+    try {
+      await ai.customerMessage(workspace(),
+        [{ r: 'client', t: 'Привет' }, { r: 'owner', t: '' }, { r: 'client' }, { r: 'owner', t: 'Есть' }],
+        ai.SCENARIOS[0].id);
+    } finally { groq.chat = real; }
+    assert.ok(sent, 'запрос собран');
+    assert.ok(sent.every(m => m.content), 'реплик без текста не осталось: ' + JSON.stringify(sent));
+    assert.strictEqual(sent.length, 2, 'пустые выброшены, остальные на месте');
+    n++; console.log('  ✓ пустая реплика в истории не валит тренировку стиля');
+  }
 
   try { fs.rmSync(process.env.CONSUL_DATA_DIR, { recursive: true, force: true }); } catch (e) {}
   console.log('ai: ' + n + ' тестов пройдено\n');

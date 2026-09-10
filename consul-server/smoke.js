@@ -24,10 +24,11 @@ function workspace() {
   const w = store.defaults('smoke');
   w.biz = { name: 'Банный двор', site: 'bannydvor.ru', about: 'Строим бани из бруса под ключ по Подмосковью.' };
   w.bot = { name: 'Банный двор', username: 'smoke' };
+  w.ai.followUp = true;   // по умолчанию выключено, но проверить надо
   w.ai.name = 'Алексей';
   w.knowledge = [{
-    id: 'k1', name: 'прайс.txt', ready: true,
-    text: [
+    id: 'k1', kind: 'price', title: 'Прайс на бани', ready: true,
+    body: [
       'Бани из профилированного бруса под ключ.',
       'Баня 4х6 — 320 000 ₽. Парная 6 м², комната отдыха 12 м², душевая.',
       'Баня 3х4 — 210 000 ₽. Парная 5 м², предбанник 6 м².',
@@ -42,6 +43,12 @@ function workspace() {
 }
 
 const log = s => console.log(s);
+
+/* На бесплатном ключе Groq лимит 8000 токенов в минуту, а один ответ с полным
+ * промптом стоит около трёх тысяч. Без пауз прогон упирается в лимит на
+ * четвёртом сообщении и дальше показывает не работу бота, а отказы. */
+const PAUSE = Number(process.env.SMOKE_PAUSE_MS) || 25000;
+const breathe = () => new Promise(r => setTimeout(r, PAUSE));
 const head = s => log('\n\x1b[1m' + s + '\x1b[0m');
 const MIN = 60000;
 
@@ -61,6 +68,7 @@ async function run() {
                    'дороговато честно говоря', 'а сколько ждать?']) {
     say('user', q);
     log('\nКлиент: ' + q);
+    await breathe();
     const r = await ai.reply(w, d, q);
     say('ai', r.reply);
     log('Бот: ' + r.reply.replace(/\n+/g, '\n     '));
@@ -77,6 +85,7 @@ async function run() {
 
   head('ВОЗВРАТ ЗАМОЛЧАВШЕГО: клиент сказал «подумаю» и пропал на час');
   say('user', 'ладно, я подумаю');
+  await breathe();
   const r2 = await ai.reply(w, d, 'ладно, я подумаю');
   say('ai', r2.reply);
   log('Бот: ' + r2.reply);
@@ -93,6 +102,7 @@ async function run() {
   const d2 = { id: '2', chatId: 2, status: 'ai', msgs: [], followedUp: 0 };
   for (const q of ['какие бани есть?', 'ну а какие размеры?']) {
     d2.msgs.push({ r: 'user', t: q, ts: Date.now() });
+  await breathe();
     const r = await ai.reply(w2, d2, q);
     d2.msgs.push({ r: 'ai', t: r.reply, ts: Date.now() });
     log('Клиент: ' + q + '\nБот: ' + r.reply + '\n     · передать человеку: ' + (r.handoff ? 'да' : 'НЕТ — проверьте'));
@@ -101,13 +111,15 @@ async function run() {
   head('ТРЕНИРОВКА СТИЛЯ: модель играет покупателя, потом разбирает манеру владельца');
   const hist = [], own = ['Есть, 4х6 за 320 тыс', 'От трёх штук сделаю 5%', 'Ок, посчитаю доставку'];
   for (let i = 0; i < own.length; i++) {
+  await breathe();
     const c = await ai.customerMessage(w, hist, ai.SCENARIOS[0].id);
     log('Покупатель: ' + c.message + (c.done ? '   [разговор закончен]' : ''));
-    hist.push({ role: 'assistant', content: c.message });
-    hist.push({ role: 'user', content: own[i] });
+    hist.push({ r: 'client', t: c.message });
+    hist.push({ r: 'owner', t: own[i] });
     log('Владелец: ' + own[i]);
     if (c.done) break;
   }
+  await breathe();
   const st = await ai.analyzeStyle(w, own);
   log('\nразбор манеры:');
   log('  ' + (st.summary || '—'));
@@ -115,6 +127,7 @@ async function run() {
   log('  инструкция боту: ' + (st.instructions || '—'));
 
   head('КАНАЛ: пост по материалам базы');
+  await breathe();
   const post = await ai.channelPost(w, 'бани для двоих');
   log((post.text || '').replace(/\n/g, '\n  '));
 
