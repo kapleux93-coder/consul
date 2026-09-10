@@ -438,6 +438,17 @@ function makeDocx(text) {
     assert.ok(/Nordlight Store/.test(sent[0].text), 'компания тоже названа');
   });
 
+  await t('имя не подставляется само — иначе все боты платформы одна «Ника»', async () => {
+    // Бот представляется этим именем клиенту. Придумать его за владельца
+    // значит выдать несуществующего человека за живого.
+    const fresh = require('./store').defaults('нового');
+    assert.strictEqual(fresh.ai.name, '', 'у нового кабинета имени нет');
+    const sys = require('./ai').systemPrompt(
+      Object.assign(fresh, { biz: { name: 'Банный двор' }, bot: { name: 'b', username: 'b' } }), []);
+    assert.ok(!/Тебя зовут/.test(sys), 'модели имя не навязано');
+    assert.ok(/не придумывай себе имя/.test(sys), 'и выдумывать его запрещено');
+  });
+
   await t('без имени приветствие остаётся связным', async () => {
     const w = store.getOrCreate(4242);
     const saved = w.ai.name;

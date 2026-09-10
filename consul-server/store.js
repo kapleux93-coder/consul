@@ -210,7 +210,10 @@ function defaults(ownerId) {
     bot: { connected: false, name: '', username: '', botId: 0, subs: 0, tokenEnc: '', webhookSecret: '' },
     biz: { name: '', site: '', about: '' },
     ai: {
-      name: 'Ника', style: 'friendly', lang: 'RU', length: 'short', lengthVal: 40,
+      /* Имени по умолчанию нет намеренно. Бот представляется им клиенту, и
+       * подставленная нами «Ника» — это выдуманный человек, которого владелец
+       * не выбирал. Пусто — бот здоровается от имени компании, без имени. */
+      name: '', style: 'friendly', lang: 'RU', length: 'short', lengthVal: 40,
       canProducts: true, canContacts: true, canDiscount: false,
       handoff: ['клиент просит менеджера', 'жалоба'],
       instructions: '',

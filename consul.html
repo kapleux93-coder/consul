@@ -302,7 +302,7 @@ function seed(){
     bot: { token:'', name:'', username:'', subs:0, connected:false },
     biz: { name:'', site:'', about:'', docs:[] },
     ai: {
-      name:'Ника', style:'friendly', lang:'RU', length:'short', lengthVal:40,
+      name:'', style:'friendly', lang:'RU', length:'short', lengthVal:40,
       canProducts:true, canContacts:true, canDiscount:false,
       handoff:['клиент просит менеджера','жалоба'],
       followUp:false,   // бот пишет клиенту первым — включают осознанно
@@ -923,9 +923,9 @@ ${topbar('Как отвечает бот','3/5')}
   ${steps(3)}
   <div class="col g8"><div class="h2">Как бот будет общаться</div>
     <div class="sub">Имя и манера. Остальное можно поменять позже.</div></div>
-  <div class="field"><div class="lbl">Имя менеджера</div>
-    <div class="inp"><input id="wizName" value="${esc(S.ai.name || '')}" placeholder="Ника" maxlength="40"></div>
-    <div class="cap2" style="padding-top:6px">Этим именем бот представится клиенту. Если спросят прямо — честно скажет, что он AI-помощник.</div></div>
+  <div class="field"><div class="lbl">Имя менеджера — если хотите</div>
+    <div class="inp"><input id="wizName" value="${esc(S.ai.name || '')}" placeholder="Оставьте пустым" maxlength="40"></div>
+    <div class="cap2" style="padding-top:6px">Этим именем бот представится клиенту, поэтому придумывать его за вас мы не будем. Оставите пустым — поздоровается от имени компании. Если спросят прямо, бот он или человек, ответит честно в любом случае.</div></div>
   <div class="col g9"><div class="lbl">Стиль</div>
     <div class="seg" data-group="style">
       ${[['friendly','Дружелюбный'],['neutral','Нейтральный'],['formal','Формальный']].map(([k,l])=>
@@ -1829,7 +1829,8 @@ VIEWS.aiset = () => `
     ${S.ai.paused?`<div class="badge att">на паузе</div>`:`<div class="pill-live"><div class="dot"></div>отвечает</div>`}</div>
   <div class="col g12">
     <div class="field"><div class="lbl">Как зовут бота</div>
-      <div class="inp"><input id="aiName" value="${esc(S.ai.name)}" placeholder="Ника"></div></div>
+      <div class="inp"><input id="aiName" value="${esc(S.ai.name)}" placeholder="Без имени"></div>
+      <div class="hint">Пусто — здоровается от имени компании, без имени.</div></div>
     ${NET.on ? voiceCard() : ''}
     <div class="row g10" style="align-items:stretch">
       <div class="f1 field"><div class="lbl">Стиль</div>
