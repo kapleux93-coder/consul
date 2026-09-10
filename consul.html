@@ -2617,17 +2617,17 @@ const ACT = {
     if(k === 'team'){ teamEdit = true; paint('team', false); return; }
     if(k === 'billing'){
       const u = S.usage;
-      sheet(`<div class="h5" style="font-size:19px">${NET.on ? 'Расход AI' : 'Billing'}</div>
+      sheet(`<div class="h5" style="font-size:19px">${NET.on ? 'Расход модели' : 'Демо-режим'}</div>
         ${NET.on && u ? `<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:12px">
             ${NET.quota && NET.quota.dailyLimit ? `<div class="between"><div class="cap" style="font-size:13px">Сегодня использовано</div><div style="font:600 15px/1 var(--m)">${NET.quota.usedToday} / ${NET.quota.dailyLimit}</div></div>` : ''}
             <div class="between"><div class="cap" style="font-size:13px">Обращений к модели</div><div style="font:600 15px/1 var(--m)">${nf(u.calls)}</div></div>
             <div class="between"><div class="cap" style="font-size:13px">Токенов на вход</div><div style="font:600 15px/1 var(--m)">${nf(u.tokensIn)}</div></div>
             <div class="between"><div class="cap" style="font-size:13px">Токенов на выход</div><div style="font:600 15px/1 var(--m)">${nf(u.tokensOut)}</div></div>
-            <div class="between"><div class="cap" style="font-size:13px">Сбоев AI</div><div style="font:600 15px/1 var(--m)">${nf(u.errors)}</div></div>
+            <div class="between"><div class="cap" style="font-size:13px">Сбоев модели</div><div style="font:600 15px/1 var(--m)">${nf(u.errors)}</div></div>
           </div>
           <div class="cap">Считается на вашем сервере. Стоимость смотрите в консоли Groq — тарификация по токенам.</div>`
         : `<div class="box" style="border-radius:18px;display:flex;flex-direction:column;gap:10px">
-            <div class="between"><div style="font:600 16px/1 var(--f)">Демо-режим</div><div class="badge ai">OFFLINE</div></div>
+            <div class="between"><div style="font:600 16px/1 var(--f)">Демо-режим</div><div class="badge ai">без сервера</div></div>
             <div class="cap">Приложение открыто без сервера — расход модели считать нечего.</div>
           </div>`}
         <button class="btn ghost" data-act="close-sheet">Закрыть</button>`);
