@@ -61,6 +61,17 @@ groq.chat = async ({ system, messages }) => {
     };
   }
 
+  // Проверка материалов: жалуемся на темы, которых в них нет.
+  if (/готов ли бот-продавец/.test(system)) {
+    const TOPICS = [
+      [/оплат|картой|наличн/i, 'Как у вас можно оплатить?', 'Клиент спросит про способы оплаты'],
+      [/доставк|самовывоз/i, 'Как происходит доставка?', 'Клиент спросит, привезёте ли вы'],
+      [/гарант/i, 'Какая у вас гарантия?', 'Клиент спросит про гарантию'],
+    ];
+    const questions = TOPICS.filter(([re]) => !re.test(q)).map(([, qq, why]) => ({ q: qq, why }));
+    return { text: JSON.stringify({ questions }), usage: { prompt_tokens: 200, completion_tokens: 30 }, model: 'test-model' };
+  }
+
   // Разбор простыни на разделы: возвращаем границы строк, как настоящая модель.
   if (/раскладываешь материалы компании по разделам/.test(system)) {
     const lines = q.replace(/^Текст:\n/, '').split('\n');
@@ -272,6 +283,73 @@ function makeDocx(text) {
   await t('пустые разделы не сохраняем', async () => {
     const r = await api('/api/knowledge/addMany', { sections: [{ title: 'Пусто', kind: 'text', body: '   ' }] });
     assert.strictEqual(r.status, 400);
+  });
+
+  console.log('api / что бот не понял');
+
+  /* Проверки ниже чистят базу знаний, а следующие за ними на неё опираются.
+     Снимаем копию и возвращаем всё на место в конце блока. */
+  const kbBackup = [];
+  for (const k of (await api('/api/state')).json.state.knowledge) {
+    const full = await api('/api/knowledge/get', { id: k.id });
+    kbBackup.push({ kind: k.kind, title: k.title, body: full.json.item.body });
+  }
+  const wipeKb = async () => {
+    for (const k of (await api('/api/state')).json.state.knowledge) await api('/api/knowledge/remove', { id: k.id });
+  };
+  const restoreKb = async () => {
+    await wipeKb();
+    for (const k of kbBackup) await api('/api/knowledge/add', k);
+  };
+
+  await t('бот читает материалы и спрашивает про то, чего в них нет', async () => {
+    // К этому месту в базе уже лежат материалы прошлых проверок, и в них
+    // упомянуто всё подряд. Начинаем с чистого листа, иначе дыр не будет.
+    await wipeKb();
+    await api('/api/knowledge/add', { kind: 'price', title: 'Прайс', body: 'Торшер Lumen Arc — 12 400 ₽. Доставка по городу бесплатно.' });
+    const r = await api('/api/knowledge/gaps');
+    assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    assert.ok(r.json.questions.length, 'дыры найдены: ' + JSON.stringify(r.json));
+    const all = r.json.questions.map(q => q.q).join(' | ');
+    assert.ok(/оплат/i.test(all), 'спросил про оплату — её в материалах нет: ' + all);
+    assert.ok(!/доставк/i.test(all), 'про доставку не спрашивает, она есть: ' + all);
+    assert.ok(r.json.questions.every(q => q.q.length <= 160));
+  });
+
+  await t('ответы владельца становятся материалом, а не теряются', async () => {
+    const r = await api('/api/knowledge/answers', { answers: [
+      { q: 'Как у вас можно оплатить?', a: 'Картой на сайте или наличными курьеру.' },
+      { q: 'Какая у вас гарантия?', a: 'Два года на всё.' },
+    ] });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.json.added, 2);
+    const item = r.json.knowledge.find(k => k.title === 'Ответы владельца');
+    assert.ok(item && item.ready, 'материал создан и готов');
+    const full = await api('/api/knowledge/get', { id: item.id });
+    assert.ok(/Картой на сайте/.test(full.json.item.body), 'ответ внутри');
+    assert.ok(/Как у вас можно оплатить\?/.test(full.json.item.body), 'вместе с вопросом');
+  });
+
+  await t('повторные ответы дописываются в тот же материал', async () => {
+    const before = (await api('/api/state')).json.state.knowledge.filter(k => k.title === 'Ответы владельца').length;
+    await api('/api/knowledge/answers', { answers: [{ q: 'Есть самовывоз?', a: 'Да, склад на Ленина 5.' }] });
+    const after = (await api('/api/state')).json.state.knowledge.filter(k => k.title === 'Ответы владельца');
+    assert.strictEqual(after.length, before, 'новый материал не заводим');
+    const full = await api('/api/knowledge/get', { id: after[0].id });
+    assert.ok(/Картой на сайте/.test(full.json.item.body), 'старые ответы на месте');
+    assert.ok(/Ленина 5/.test(full.json.item.body), 'новый дописан');
+  });
+
+  await t('пустые ответы не сохраняем', async () => {
+    const r = await api('/api/knowledge/answers', { answers: [{ q: 'Вопрос', a: '   ' }] });
+    assert.strictEqual(r.status, 400);
+  });
+
+  await t('без материалов проверять нечего', async () => {
+    await wipeKb();
+    const r = await api('/api/knowledge/gaps');
+    assert.strictEqual(r.status, 502, 'честный отказ, а не пустой список');
+    await restoreKb();
   });
 
   console.log('api / правка материала');

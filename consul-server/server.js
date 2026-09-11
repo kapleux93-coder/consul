@@ -1088,6 +1088,56 @@ const routes = {
     ok(res, { ok: true, knowledge: publicState(w).knowledge });
   },
 
+  /* Что бот прочитал и чего не понял: вопросы клиентов, на которые ответа в
+     материалах нет. Спросить владельца сейчас дешевле, чем передавать
+     менеджеру каждый такой разговор потом. */
+  'POST /api/knowledge/gaps': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    if (!groq.enabled()) return fail(res, 503, 'Проверка недоступна: модель не настроена.');
+    const q = limits.checkAiQuota(w);
+    if (!q.ok) return fail(res, 429, 'Дневной лимит обращений к модели исчерпан. Обновится завтра.');
+    try {
+      const r = await ai.gaps(w);
+      limits.spendAi(w);
+      w.usage.calls++;
+      w.usage.tokensIn += (r.usage && r.usage.prompt_tokens) || 0;
+      w.usage.tokensOut += (r.usage && r.usage.completion_tokens) || 0;
+      store.mark(w, 'gapsChecked');
+      store.save(w);
+      ok(res, { ok: true, questions: r.questions, read: w.knowledge.filter(k => k.ready).length });
+    } catch (e) {
+      console.warn('[knowledge] проверка пробелов: ' + e.message);
+      fail(res, 502, 'Не получилось проверить материалы. Попробуйте ещё раз.');
+    }
+  },
+
+  /* Ответы владельца на найденные пробелы — отдельным материалом. */
+  'POST /api/knowledge/answers': async (req, res, body, user) => {
+    const w = store.getOrCreate(user.id);
+    const pairs = (Array.isArray(body.answers) ? body.answers : [])
+      .map(x => ({ q: clean(x && x.q, 160), a: String((x && x.a) || '').trim().slice(0, 1500) }))
+      .filter(x => x.q && x.a);
+    if (!pairs.length) return fail(res, 400, 'Нечего сохранять');
+
+    const text = pairs.map(x => x.q + '\n' + x.a).join('\n\n');
+    const room = limits.checkKnowledgeRoom(w, text.length);
+    if (!room.ok) return fail(res, 400, 'База знаний заполнена: ' + Math.round(room.limit / 1000) + ' тыс. знаков.');
+
+    // Дописываем в один материал, а не плодим новый на каждую проверку.
+    const prev = w.knowledge.find(k => k.kind === 'faq' && k.title === 'Ответы владельца');
+    if (prev) {
+      prev.body = (prev.body ? prev.body + '\n\n' : '') + text;
+      prev.ready = true;
+      prev.meta = `${Math.round(prev.body.length / 100) / 10} тыс. знаков`;
+    } else {
+      if (w.knowledge.length >= 40) return fail(res, 400, 'Слишком много источников — удалите ненужные');
+      w.knowledge.push(knowledgeItem({ kind: 'faq', title: 'Ответы владельца', body: text }));
+    }
+    store.mark(w, 'knowledge');
+    store.save(w);
+    ok(res, { ok: true, added: pairs.length, knowledge: publicState(w).knowledge });
+  },
+
   /* Полный текст одного материала — для экрана правки. */
   'POST /api/knowledge/get': async (req, res, body, user) => {
     const w = store.getOrCreate(user.id);

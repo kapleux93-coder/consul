@@ -636,7 +636,7 @@ function aiReply(input){
    Навигация
    ============================================================ */
 const SCREENS = $('#screens');
-const TABS_OF = { home:'home', inbox:'inbox', chat:null, clients:'clients', knowledge:'more', kbsplit:'more', kbedit:'more', funnel:'more', aiset:'ai', analytics:'more', channel:'more', more:'more' };
+const TABS_OF = { home:'home', inbox:'inbox', chat:null, clients:'clients', knowledge:'more', kbsplit:'more', kbedit:'more', kbgaps:'more', funnel:'more', aiset:'ai', analytics:'more', channel:'more', more:'more' };
 const ONB = ['welcome','connect','connected','business','aiwiz','team','test'];
 let stack = [];
 let current = null;
@@ -1088,7 +1088,8 @@ function checklist(){
   ];
 }
 
-let finishConfirmed = false;   // владелец сознательно уходит без базы знаний
+let finishConfirmed = false;
+let gapsDone = false;   // материалы уже давали боту прочитать в этом заходе   // владелец сознательно уходит без базы знаний
 let testLog = [];
 MOUNT.test = el => {
   const feed = $('#testFeed', el);
@@ -1524,6 +1525,13 @@ VIEWS.knowledge = () => {
         <div style="font:400 12px/1 var(--f);color:${k.ready?'var(--muted4)':'var(--accent-d)'}">${k.ready?'':'черновик'}</div>
       </button>`).join('')}
   </div>
+  ${NET.on && S.knowledge.some(k=>k.ready) ? `<button class="box" style="border-radius:18px;display:flex;align-items:center;gap:13px;width:100%;text-align:left" data-act="kb-gaps">
+    <div class="f1 col g4">
+      <div style="font:600 15px/1.2 var(--f)">Проверить, всё ли бот понял</div>
+      <div class="cap2">Прочитает материалы и спросит про то, чего в них нет</div>
+    </div>
+    <div style="color:#C4C8CD;font:400 18px/1 var(--f)">›</div>
+  </button>` : ''}
   <div class="col g9"><div class="lbl">${S.knowledge.length ? 'Добавить ещё' : 'С чего начать'}</div>
     ${NET.on ? `<button class="box" style="border-radius:18px;display:flex;align-items:center;gap:13px;width:100%;text-align:left" data-act="kb-split">
       <div class="f1 col g4">
@@ -1540,6 +1548,90 @@ VIEWS.knowledge = () => {
 </div></div>
 ${tabbar('more')}`;
 };
+
+/* ---------- Что бот не понял: вопросы владельцу ---------- */
+/* Владелец загрузил прайс и считает, что готов. Клиент спрашивает про оплату
+ * картой — и разговор уходит менеджеру. Такие дыры видно заранее: даём боту
+ * прочитать материалы и задать владельцу вопросы, на которые у него нет ответа. */
+
+let gapsState = null;   // { busy, questions:[{q,why,a}], read, done, err }
+
+VIEWS.kbgaps = () => {
+  const g = gapsState || (gapsState = { busy: true, questions: [], read: 0, err: '' });
+  if(g.busy) return `
+${topbar('Проверка материалов','')}
+<div class="body"><div class="pad g16">
+  <div class="col g8"><div class="h2">Бот читает материалы</div>
+    <div class="sub">Ищет вопросы, на которые не сможет ответить клиенту. Обычно занимает несколько секунд.</div></div>
+</div></div>`;
+
+  if(g.err) return `
+${topbar('Проверка материалов','')}
+<div class="body"><div class="pad g16">
+  <div class="col g8"><div class="h2">Не получилось</div><div class="sub">${esc(g.err)}</div></div>
+  <div class="push"><button class="btn" data-act="gaps-retry">Попробовать снова</button></div>
+</div></div>`;
+
+  if(!g.questions.length) return `
+${topbar('Проверка материалов','')}
+<div class="body"><div class="pad g16">
+  <div class="col g8"><div class="h2">Пробелов не нашлось</div>
+    <div class="sub">Бот прочитал ${g.read} ${plural(g.read,'материал','материала','материалов')} и на частые вопросы клиентов ответить сможет.</div></div>
+  <div class="push"><button class="btn" data-act="gaps-done">Хорошо</button></div>
+</div></div>`;
+
+  const left = g.questions.filter(q => !(q.a || '').trim()).length;
+  return `
+${topbar('Что бот не знает','')}
+<div class="body"><div class="pad g16">
+  <div class="col g8"><div class="h2">${g.questions.length} ${plural(g.questions.length,'вопрос','вопроса','вопросов')} без ответа</div>
+    <div class="sub">Бот прочитал материалы и нашёл, чего в них не хватает. Про это спрашивают часто — ответьте сейчас, и он не станет дёргать вас потом.</div></div>
+  <div class="col g10">
+    ${g.questions.map((q,i)=>`
+      <div class="box plain" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:9px">
+        <div style="font:600 15px/1.3 var(--f)">${esc(q.q)}</div>
+        ${q.why ? `<div class="cap2">${esc(q.why)}</div>` : ''}
+        <div class="inp" style="padding:10px 12px"><textarea data-gap="${i}" rows="2" placeholder="Ответьте своими словами">${esc(q.a || '')}</textarea></div>
+      </div>`).join('')}
+  </div>
+  <div class="push col g10" style="padding-top:16px">
+    <button class="btn" id="gaps-save" ${g.busy?'disabled':''}>Сохранить ответы</button>
+    <button class="link" data-act="gaps-done">${left === g.questions.length ? 'Пропустить' : 'Остальное потом'}</button>
+  </div>
+</div></div>`;
+};
+
+MOUNT.kbgaps = el => {
+  const g = gapsState; if(!g) return;
+  el.querySelectorAll('[data-gap]').forEach(t => {
+    t.addEventListener('input', () => { g.questions[+t.dataset.gap].a = t.value; });
+  });
+  const saveBtn = $('#gaps-save', el);
+  if(saveBtn) saveBtn.addEventListener('click', async () => {
+    const answers = g.questions.filter(q => (q.a || '').trim()).map(q => ({ q: q.q, a: q.a }));
+    if(!answers.length){ toast('Ответьте хотя бы на один вопрос'); return; }
+    g.busy = true; paint('kbgaps', false);
+    try {
+      const r = await NET.req('/api/knowledge/answers', { answers });
+      S.knowledge = r.knowledge; save(); haptic('ok');
+      gapsState = null;
+      toast('Бот запомнил ' + r.added + ' ' + plural(r.added,'ответ','ответа','ответов'));
+      go('knowledge', { back:true });
+    } catch(e){ g.busy = false; paint('kbgaps', false); netErr(e); }
+  });
+};
+
+async function loadGaps(){
+  gapsState = { busy: true, questions: [], read: 0, err: '' };
+  go('kbgaps');
+  try {
+    const r = await NET.req('/api/knowledge/gaps', {});
+    gapsState = { busy:false, questions: r.questions.map(q => ({ q:q.q, why:q.why, a:'' })), read: r.read, err:'' };
+  } catch(e){
+    gapsState = { busy:false, questions: [], read: 0, err: e.message || 'Проверка не удалась' };
+  }
+  paint('kbgaps', false);
+}
 
 /* ---------- Разбор простыни на разделы ---------- */
 /* Владелец приходит с одним куском текста, где вперемешку цены, доставка и
@@ -2404,6 +2496,7 @@ const ACT = {
   'to-test': () => { S.step = 5; testLog = []; save(); pushStep(); go('test'); },
 
   'add-knowledge-now': () => { closeSheet(); setTimeout(()=>kbSheet('price'), 300); },
+  'gaps-now': () => { closeSheet(); gapsDone = true; setTimeout(loadGaps, 280); },
   'finish-anyway': () => { finishConfirmed = true; closeSheet(); setTimeout(()=>ACT.finish(), 250); },
 
   'test-q': (b) => testSend(b.dataset.q),
@@ -2419,6 +2512,16 @@ const ACT = {
         <div class="box warm" style="border-radius:16px">Хватит пары абзацев: перечислите товары с ценами и условия доставки своими словами. Это тридцать секунд.</div>
         <button class="btn" data-act="add-knowledge-now">Добавить материалы</button>
         <button class="link" data-act="finish-anyway">Всё равно продолжить</button>`);
+      return;
+    }
+    // Материалы есть, но никто не проверил, хватает ли их. Дыры в базе видно
+    // заранее, и закрыть их сейчас дешевле, чем отдавать менеджеру каждый
+    // разговор, в котором клиент о них споткнётся.
+    if(NET.on && ready && !gapsDone && !finishConfirmed){
+      sheet(`<div class="col g8"><div class="h5" style="font-size:19px">Дать боту прочитать материалы?</div>
+          <div class="sub-s">Он найдёт вопросы, на которые не сможет ответить, и спросит вас о них сейчас. Минута — и вместо «подключаю менеджера» клиент получит ответ.</div></div>
+        <button class="btn" data-act="gaps-now">Проверить материалы</button>
+        <button class="link" data-act="finish-anyway">Пропустить</button>`);
       return;
     }
     if(NET.on){
@@ -2530,6 +2633,9 @@ const ACT = {
   'funnel-days': (b) => { funnelData.days = +b.dataset.d; haptic('sel'); loadFunnel(); },
 
   'kb-split': () => { kbSplit = { text:'', sections:null, busy:false, err:'' }; go('kbsplit'); },
+  'kb-gaps': () => loadGaps(),
+  'gaps-retry': () => loadGaps(),
+  'gaps-done': () => { gapsState = null; go('knowledge', { back:true }); },
   'sp-kind': (b) => { kbSplit.sections[+b.dataset.i].kind = b.dataset.k; haptic('sel'); paint('kbsplit', false); },
   'sp-drop': (b) => {
     kbSplit.sections.splice(+b.dataset.i, 1); haptic('warn');

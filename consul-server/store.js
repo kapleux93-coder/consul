@@ -240,7 +240,7 @@ function defaults(ownerId) {
      * больше не меняется: по этим отметкам видно, на каком шаге люди бросают.
      * Считать их из текущего состояния нельзя — оно говорит «где человек
      * сейчас», а не «докуда он дошёл и когда». */
-    milestones: { opened: 0, connected: 0, knowledge: 0, onboarded: 0, firstClient: 0 },
+    milestones: { opened: 0, connected: 0, knowledge: 0, gapsChecked: 0, onboarded: 0, firstClient: 0 },
   };
 }
 

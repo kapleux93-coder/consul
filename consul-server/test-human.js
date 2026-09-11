@@ -61,10 +61,13 @@ t('пауза не мгновенная и не бесконечная', () => {
 });
 
 t('вторая реплика идёт быстрее первой — «дописывает мысль»', () => {
+  // Диапазоны пауз пересекаются (1200–2600 против 600–1400), поэтому одна пара
+  // замеров ничего не доказывает: изредка вторая реплика выпадала медленнее
+  // первой, и тест падал на ровном месте. Сравниваем средние по многим броскам.
   const txt = 'Доставка бесплатная.';
-  const first = human.delayFor(txt, true);
-  const next = human.delayFor(txt, false);
-  assert.ok(next < first, `${next} должно быть меньше ${first}`);
+  const mean = f => { let s = 0; for (let i = 0; i < 200; i++) s += human.delayFor(txt, f); return s / 200; };
+  const first = mean(true), next = mean(false);
+  assert.ok(next < first, `в среднем ${Math.round(next)} должно быть меньше ${Math.round(first)}`);
 });
 
 console.log('human / доставка');

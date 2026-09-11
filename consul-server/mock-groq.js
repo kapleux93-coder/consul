@@ -158,6 +158,16 @@ const srv = http.createServer((req, res) => {
       content = JSON.stringify({ text: 'Посчитал доставку — по области бесплатно. Прислать фото готовой 4х6?' });
     } else if (/Ты играешь ПОКУПАТЕЛЯ/.test(system)) {
       content = JSON.stringify(customerTurn(system, msgs));
+    } else if (/готов ли бот-продавец/.test(system)) {
+      // Ищем в материалах несколько обязательных тем и жалуемся на отсутствующие.
+      const TOPICS = [
+        [/оплат|картой|наличн/i, 'Как у вас можно оплатить?', 'Клиент спросит про способы оплаты'],
+        [/доставк|привоз|самовывоз/i, 'Как происходит доставка?', 'Клиент спросит, привезёте ли вы'],
+        [/гарант/i, 'Какая у вас гарантия?', 'Клиент спросит про гарантию'],
+        [/возврат|обмен/i, 'Можно ли вернуть или обменять?', 'Клиент спросит про возврат'],
+      ];
+      const questions = TOPICS.filter(([re]) => !re.test(question)).map(([, q, why]) => ({ q, why }));
+      content = JSON.stringify({ questions });
     } else if (/раскладываешь материалы компании по разделам/.test(system)) {
       content = JSON.stringify(splitSections(question));
     } else if (/разбираешь манеру письма продавца/.test(system)) {
