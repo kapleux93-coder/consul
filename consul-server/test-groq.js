@@ -12,6 +12,7 @@ const seen = [];
 let models = ['whisper-large-v3', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 let nextStatus = 200, nextBody = null, rejectJsonMode = false, failTimes = 0, nextError = null;
 let badJsonOnce = false;      // один отказ «JSON не собрался», как у живой модели
+let dailyLimitOnce = false;   // отказ «кончилась суточная квота»
 
 const stub = http.createServer((req, res) => {
   let raw = '';
@@ -29,6 +30,10 @@ const stub = http.createServer((req, res) => {
       return res.end(JSON.stringify({ error: { message: 'response_format json_object is not supported by this model' } }));
     }
     if (failTimes > 0) { failTimes--; res.writeHead(429, { 'retry-after': '0' }); return res.end('rate limited'); }
+    if (dailyLimitOnce) {
+      res.writeHead(429);
+      return res.end('{"error":{"message":"Rate limit reached ... on tokens per day (TPD): Limit 200000"}}');
+    }
     if (badJsonOnce) { badJsonOnce = false; res.writeHead(400); return res.end('Failed to validate JSON. json_validate_failed'); }
     if (nextStatus !== 200) { res.writeHead(nextStatus); return res.end(nextError || 'boom'); }
     res.writeHead(200, { 'content-type': 'application/json' });
@@ -121,6 +126,25 @@ const stub = http.createServer((req, res) => {
 
     failTimes = 0; g._resetCooling();
     assert.strictEqual(g.cooling(), 0);
+  });
+
+  await t('суточный лимит отличаем от минутного и говорим об этом', async () => {
+    // Минутный проходит сам через полминуты, суточный — только к утру. Если их
+    // путать, сервис весь день долбится в закрытую дверь и молчит об этом.
+    g._resetCooling();
+    let told = 0;
+    g.onDailyLimit = () => told++;
+    dailyLimitOnce = true;
+    try {
+      await assert.rejects(() => g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }] }), /429/);
+      assert.strictEqual(told, 1, 'владельцу сервиса сказали');
+      assert.strictEqual(g.dailyLimitHit(), true, 'помним, что лимит суточный');
+      await assert.rejects(() => g.chat({ system: 's', messages: [{ role: 'user', content: 'q' }] }),
+        /суточный лимит/, 'и сообщение про сутки, а не про секунды');
+      assert.ok(g.cooling() > 10 * 60 * 1000, 'пауза длинная, а не двадцать секунд');
+    } finally {
+      dailyLimitOnce = false; g.onDailyLimit = null; g._resetCooling();
+    }
   });
 
   await t('короткий всплеск 429 паузу не включает', async () => {

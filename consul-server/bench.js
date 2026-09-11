@@ -24,8 +24,13 @@ const store = require('./store');
 const ai = require('./ai');
 const groq = require('./groq');
 
-/** Пауза между обращениями: бесплатный тариф Groq — 8000 токенов в минуту. */
-const PAUSE_MS = Number(process.env.BENCH_PAUSE_MS) || 13000;
+/* Пауза между обращениями. Бесплатный тариф Groq даёт 8000 токенов в минуту,
+ * а один ответ стоит около 2700 — значит не чаще трёх в минуту. С паузой в 13
+ * секунд стенд упирался в лимит, ответ падал в отказ и попадал в замер как
+ * «передал человеку». Замер, испорченный собственной спешкой, хуже отсутствия
+ * замера, поэтому по умолчанию берём с запасом. На платном ключе ставьте
+ * BENCH_PAUSE_MS=1000 и прогоняйте всё за минуту. */
+const PAUSE_MS = Number(process.env.BENCH_PAUSE_MS) || 24000;
 
 /* ------------------------------------------------------------------- ниши */
 
@@ -189,9 +194,15 @@ async function runNiche(n) {
   for (const [kind, list] of [['обычное', n.normal], ['нужен человек', n.human]]) {
     for (const q of list) {
       const d = { id: '1', chatId: 1, status: 'ai', msgs: [{ r: 'user', t: q, ts: Date.now() }], followedUp: 0 };
+      // Упёрлись в минутный лимит — это не свойство промпта, а наша спешка.
+      // Ждём и повторяем, иначе отказ попадёт в замер как решение бота.
       let r;
-      try { r = await ai.reply(w, d, q); }
-      catch (e) { r = { reply: 'ОШИБКА: ' + e.message, handoff: false, fallback: true }; }
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { r = await ai.reply(w, d, q); } catch (e) { r = { reply: 'ОШИБКА: ' + e.message, handoff: false, fallback: true }; }
+        if (!r.fallback || !/429|лимит/i.test(r.error || r.reply || '')) break;
+        process.stdout.write('    (лимит Groq, жду минуту и повторяю)\n');
+        await new Promise(x => setTimeout(x, 60000));
+      }
       rows.push({ kind, q, reply: r.reply, handoff: !!r.handoff, fallback: !!r.fallback, made: invented(r.reply, kbText) });
       await new Promise(x => setTimeout(x, PAUSE_MS));
     }

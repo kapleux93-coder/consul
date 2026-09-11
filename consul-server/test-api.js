@@ -883,7 +883,11 @@ function makeDocx(text) {
     assert.strictEqual(r.status, 200);
     assert.strictEqual(typeof r.json.diag.ready, 'boolean');
     assert.ok(Array.isArray(r.json.diag.warnings));
-    assert.strictEqual(r.json.diag.quotaLimit, 300);
+    // Не сверяем с конкретным числом: лимит привязан к суточной квоте Groq и
+    // меняется вместе с тарифом. Важно, что он есть и осмысленный.
+    const cfg = require('./config');
+    assert.strictEqual(r.json.diag.quotaLimit, cfg.limits.dailyPerWorkspace);
+    assert.ok(r.json.diag.quotaLimit > 0);
   });
 
   await t('тренировка стиля: AI играет клиента, а не продавца', async () => {

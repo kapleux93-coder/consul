@@ -43,20 +43,37 @@ let resolving = null;     // промис выбора, чтобы не гоня
  * назвал сам Groq: пока она идёт, к модели не ходим, а сразу зовём человека.
  * Так отказ становится быстрым и одинаковым для всех, а не случайным. */
 let coolingUntil = 0;
+let coolingDaily = false;      // упёрлись в суточный лимит, а не в минутный
 const COOL_DEFAULT_MS = 20000;
+
+/* Минутный лимит проходит сам через полминуты, суточный — только к утру.
+ * Разница принципиальная: в первом случае надо подождать, во втором сервис
+ * замолчал до завтра и об этом надо сказать вслух, а не долбиться в закрытую
+ * дверь весь день. Потолок держим час: за это время лимит либо обновится,
+ * либо мы сходим и проверим ключ. */
+const COOL_DAILY_MS = 60 * 60 * 1000;
 
 /** Сколько миллисекунд осталось до конца паузы. 0 — можно работать. */
 function cooling(now = Date.now()) {
   return coolingUntil > now ? coolingUntil - now : 0;
 }
 
-function coolDown(retryAfterSec) {
-  const ms = Number.isFinite(retryAfterSec) && retryAfterSec > 0
-    ? Math.min(retryAfterSec * 1000, 120000) : COOL_DEFAULT_MS;
+function coolDown(retryAfterSec, body) {
+  // «tokens per day» в теле ответа — это не всплеск, это конец суточной квоты.
+  const daily = /per day|TPD|tokens per day/i.test(String(body || ''));
+  const ms = daily ? COOL_DAILY_MS
+    : Number.isFinite(retryAfterSec) && retryAfterSec > 0
+      ? Math.min(retryAfterSec * 1000, 120000) : COOL_DEFAULT_MS;
   const until = Date.now() + ms;
   if (until > coolingUntil) {
     coolingUntil = until;
-    console.warn('[groq] лимит исчерпан, пауза ' + Math.round(ms / 1000) + ' с — диалоги уходят менеджерам');
+    coolingDaily = daily;
+    console.warn(daily
+      ? '[groq] суточный лимит токенов исчерпан — бот молчит до обновления квоты'
+      : '[groq] лимит исчерпан, пауза ' + Math.round(ms / 1000) + ' с — диалоги уходят менеджерам');
+    if (daily && typeof module.exports.onDailyLimit === 'function') {
+      try { module.exports.onDailyLimit(); } catch (e) {}
+    }
   }
 }
 
@@ -81,7 +98,7 @@ async function request(pathname, init, tries = 3) {
         if (i < tries - 1) { await new Promise(r => setTimeout(r, waitMs)); continue; }
         // Ретраи кончились, а лимит держится: значит он не мгновенный всплеск,
         // и остальным кабинетам ходить туда сейчас незачем.
-        if (res.status === 429) coolDown(ra);
+        if (res.status === 429) coolDown(ra, lastErr.message);
         throw lastErr;
       }
       if (!res.ok) throw new Error('groq ' + res.status + ' ' + (await res.text()).slice(0, 300));
@@ -144,7 +161,11 @@ async function model() {
 async function chat(opts) {
   if (!enabled()) throw new Error('GROQ_API_KEY не задан');
   const left = cooling();
-  if (left) throw new Error('groq 429: лимит исчерпан, до восстановления ' + Math.ceil(left / 1000) + ' с');
+  if (left) {
+    throw new Error(coolingDaily
+      ? 'groq 429: суточный лимит токенов исчерпан, квота обновится позже'
+      : 'groq 429: лимит исчерпан, до восстановления ' + Math.ceil(left / 1000) + ' с');
+  }
   const m = await model();
   const body = {
     model: m,
@@ -199,7 +220,8 @@ function extractJson(text) {
 }
 
 module.exports = { enabled, chat, model, listModels, extractJson, cooling, PREFERRED,
-  _resetCooling() { coolingUntil = 0; } };
+  dailyLimitHit: () => coolingDaily && cooling() > 0,
+  _resetCooling() { coolingUntil = 0; coolingDaily = false; } };
 
 /* --------------------------------------------------------------- CLI */
 if (require.main === module && process.argv.includes('--list')) {
