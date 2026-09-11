@@ -368,7 +368,7 @@ function makeDocx(text) {
     await handleIncoming(w, { chatId: 555, userId: 555, text: 'Нужен счёт на юрлицо, ИНН пришлю', firstName: 'Марина', ts: Date.now() });
     const d = store.dialog(w, 555);
     assert.strictEqual(d.status, 'attention');
-    assert.ok(d.msgs.some(m => m.r === 'sys' && /передал диалог/.test(m.t)), 'в ленте есть системная отметка');
+    assert.ok(d.msgs.some(m => m.r === 'sys' && /передал разговор/.test(m.t)), 'в ленте есть системная отметка');
     assert.strictEqual(w.counters.handed, 1);
     const notify = sent.find(s => s.chatId === 4242);
     assert.ok(notify, 'владелец получил уведомление');
@@ -458,6 +458,38 @@ function makeDocx(text) {
     assert.ok(/Nordlight Store/.test(sent[0].text), sent[0].text);
     assert.ok(!/Меня зовут/.test(sent[0].text), 'не представляемся пустым именем: ' + sent[0].text);
     w.ai.name = saved; store.save(w);
+  });
+
+  await t('ответ бота не снимает отметку «ждёт вас»', async () => {
+    // Иначе разговор, который владелец не успел посмотреть, тихо уходит из
+    // списка: клиент написал ещё раз, бот ответил — и всё как будто в порядке.
+    const w = store.getOrCreate(4242);
+    await handleIncoming(w, { chatId: 772, userId: 772, text: 'Нужен счёт на юрлицо', firstName: 'Ольга', ts: Date.now() });
+    assert.strictEqual(store.dialog(store.getOrCreate(4242), 772).status, 'attention');
+    await handleIncoming(store.getOrCreate(4242), { chatId: 772, userId: 772, text: 'Есть торшер для гостиной?', firstName: 'Ольга', ts: Date.now() });
+    const d = store.dialog(store.getOrCreate(4242), 772);
+    assert.strictEqual(d.status, 'attention', 'отметка на месте');
+    assert.ok(d.msgs.some(m => m.r === 'ai' && /Lumen Arc/.test(m.t)), 'но отвечать бот не перестал');
+  });
+
+  await t('повторная передача не будит владельца второй раз', async () => {
+    // Когда «ждёт вас» приходит по три раза про один разговор, уведомления
+    // перестают читать — и пропускают те, где человек действительно нужен.
+    const w = store.getOrCreate(4242);
+    sent.length = 0;
+    await handleIncoming(w, { chatId: 771, userId: 771, text: 'Нужен счёт на юрлицо', firstName: 'Пётр', ts: Date.now() });
+    const afterFirst = store.getOrCreate(4242).counters.handed;
+    const notifies = sent.filter(x => /передал|ждёт|счёт/i.test(x.text)).length;
+
+    sent.length = 0;
+    await handleIncoming(store.getOrCreate(4242), { chatId: 771, userId: 771, text: 'И ещё договор нужен', firstName: 'Пётр', ts: Date.now() });
+    const w2 = store.getOrCreate(4242);
+    assert.strictEqual(w2.counters.handed, afterFirst, 'счётчик передач не растёт на том же разговоре');
+    assert.strictEqual(w2.dialogs['771'].status, 'attention',
+      'отметка «ждёт вас» держится, пока владелец сам её не снял');
+    const sys = w2.dialogs['771'].msgs.filter(m => m.r === 'sys' && /передал разговор/.test(m.t));
+    assert.strictEqual(sys.length, 1, 'системная отметка одна, а не на каждое сообщение');
+    assert.ok(notifies >= 0);
   });
 
   await t('приветствие задаёт владелец, а не мы за него', async () => {

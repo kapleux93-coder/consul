@@ -674,14 +674,24 @@ async function respond(w, msg, text) {
     w.counters.msgs += parts.length;
 
     if (r.handoff) {
+      // Разговор уже помечен как требующий человека — владелец о нём знает.
+      // Второе уведомление про тот же диалог только притупляет внимание к
+      // остальным: когда «ждёт вас» приходит по три раза, их перестают читать.
+      const already = d.status === 'attention';
       d.status = 'attention';
-      w.counters.handed++;
-      store.pushMessage(w, msg.chatId, { r: 'sys', t: 'AI передал диалог: ' + (r.reason || 'нужен человек'), ts: Date.now() });
+      if (!already) {
+        w.counters.handed++;
+        store.pushMessage(w, msg.chatId, { r: 'sys', t: 'Бот передал разговор: ' + (r.reason || 'нужен человек'), ts: Date.now() });
+      }
       store.save(w);
       pushDialog(w, d);
-      await notifyHandoff(w, d, r.reason);
+      if (!already) await notifyHandoff(w, d, r.reason);
     } else {
-      d.status = 'ai';
+      // Разговор, уже помеченный «ждёт вас», сам с этой полки не уходит. Бот
+      // продолжает отвечать — но снять отметку может только владелец, забрав
+      // диалог или вернув его боту. Иначе очередной ответ бота вычёркивал из
+      // списка то, что человек так и не посмотрел.
+      if (d.status !== 'attention') d.status = 'ai';
       w.counters.byAi++;
       store.save(w);
       pushDialog(w, d);
