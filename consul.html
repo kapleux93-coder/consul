@@ -302,7 +302,7 @@ function seed(){
     bot: { token:'', name:'', username:'', subs:0, connected:false },
     biz: { name:'', site:'', about:'', docs:[] },
     ai: {
-      name:'', style:'friendly', lang:'RU', length:'short', lengthVal:40,
+      name:'', hello:'', style:'friendly', lang:'RU', length:'short', lengthVal:40,
       canProducts:true, canContacts:true, canDiscount:false,
       handoff:['клиент просит менеджера','жалоба'],
       followUp:false,   // бот пишет клиенту первым — включают осознанно
@@ -926,6 +926,11 @@ ${topbar('Как отвечает бот','3/5')}
   <div class="field"><div class="lbl">Имя менеджера — если хотите</div>
     <div class="inp"><input id="wizName" value="${esc(S.ai.name || '')}" placeholder="Оставьте пустым" maxlength="40"></div>
     <div class="cap2" style="padding-top:6px">Этим именем бот представится клиенту, поэтому придумывать его за вас мы не будем. Оставите пустым — поздоровается от имени компании. Если спросят прямо, бот он или человек, ответит честно в любом случае.</div></div>
+  <div class="col g9"><div class="lbl">Чем встречать клиента</div>
+    <div class="cap2">Первое сообщение, которое человек увидит, нажав «Начать». Выберите или напишите своё.</div>
+    <div class="col g8" id="helloCards">${helloCards()}</div>
+    <div class="field"><div class="inp"><textarea id="wizHello" rows="3" placeholder="${esc(helloDefault())}">${esc(S.ai.hello || '')}</textarea></div></div>
+  </div>
   <div class="col g9"><div class="lbl">Стиль</div>
     <div class="seg" data-group="style">
       ${[['friendly','Дружелюбный'],['neutral','Нейтральный'],['formal','Формальный']].map(([k,l])=>
@@ -951,7 +956,46 @@ ${topbar('Как отвечает бот','3/5')}
 MOUNT.aiwiz = el => {
   const n = $('#wizName', el);
   if(n) n.addEventListener('input', ()=>{ S.ai.name = n.value.trim(); save(); pushAI(); });
+  const h = $('#wizHello', el);
+  if(h) h.addEventListener('input', ()=>{
+    S.ai.hello = h.value.trim(); save(); pushAI();
+    const box = $('#helloCards', el); if(box) box.innerHTML = helloCards();
+  });
 };
+
+/* Чем бот встречает клиента. Варианты подставляют готовый текст, а не номер
+ * шаблона: владелец сразу видит то, что уйдёт клиенту, и правит любое слово. */
+function helloDefault(){
+  const who = (S.ai.name || '').trim(), firm = (S.biz.name || S.bot.name || '').trim();
+  const intro = who && firm ? `Меня зовут ${who}, компания «${firm}»`
+    : who ? `Меня зовут ${who}`
+    : firm ? `Это ${firm}` : '';
+  return intro
+    ? `Здравствуйте! ${intro}. Напишите, что вас интересует — подскажу по товарам, ценам и доставке.`
+    : 'Здравствуйте! Напишите, чем могу помочь.';
+}
+
+function helloOptions(){
+  const who = (S.ai.name || '').trim(), firm = (S.biz.name || S.bot.name || 'компания').trim();
+  // Названия в кавычках не склоняем и не подставляем род: имя может быть любым.
+  const me = who ? `${who}, компания «${firm}»` : `компания «${firm}»`;
+  return [
+    ['Нейтральное', helloDefault()],
+    ['Покороче', `Здравствуйте! ${who ? who + ' на связи' : '«' + firm + '»'}. Чем помочь?`],
+    ['С вопросом', `Здравствуйте! ${me}. Расскажите, что ищете — подберём и назовём цену.`],
+    ['По-деловому', `Добрый день. ${me}. Отвечаем по ассортименту, ценам и срокам.`],
+  ];
+}
+
+function helloCards(){
+  const cur = (S.ai.hello || '').trim();
+  return helloOptions().map(([label, text], i) => `
+    <button class="box plain" style="border-radius:16px;padding:13px 14px;display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;border-color:${cur===text?'var(--accent)':'var(--line)'}"
+            data-act="pick-hello" data-i="${i}">
+      <div class="cap2">${label}</div>
+      <div style="font:400 14px/1.45 var(--f);color:var(--ink2)">${esc(text)}</div>
+    </button>`).join('');
+}
 
 function handoffChips(){
   return S.ai.handoff.map((h,i)=>`<button class="chip tag" data-act="rm-handoff" data-i="${i}">${esc(h)} ×</button>`).join('')
@@ -1831,6 +1875,11 @@ VIEWS.aiset = () => `
     <div class="field"><div class="lbl">Как зовут бота</div>
       <div class="inp"><input id="aiName" value="${esc(S.ai.name)}" placeholder="Без имени"></div>
       <div class="hint">Пусто — здоровается от имени компании, без имени.</div></div>
+    <div class="col g9"><div class="lbl">Чем встречать клиента</div>
+      <div class="cap2">Первое сообщение после «Начать».</div>
+      <div class="col g8" id="setHelloCards">${helloCards()}</div>
+      <div class="field"><div class="inp"><textarea id="setHello" rows="3" placeholder="${esc(helloDefault())}">${esc(S.ai.hello || '')}</textarea></div></div>
+    </div>
     ${NET.on ? voiceCard() : ''}
     <div class="row g10" style="align-items:stretch">
       <div class="f1 field"><div class="lbl">Стиль</div>
@@ -1908,6 +1957,11 @@ const PREVIEW_QS = ['Сколько стоит доставка в Казань?
 let previewQ = 0;
 MOUNT.aiset = el => {
   const n = $('#aiName', el); n.addEventListener('input', ()=>{ S.ai.name = n.value; save(); pushAI(); });
+  const h = $('#setHello', el);
+  if(h) h.addEventListener('input', ()=>{
+    S.ai.hello = h.value.trim(); save(); pushAI();
+    const box = $('#setHelloCards', el); if(box) box.innerHTML = helloCards();
+  });
   const t = $('#aiInstr', el); t.addEventListener('input', ()=>{ S.ai.instructions = t.value; save(); pushAI(); });
   const r = $('#lenRange', el), fill = $('.slider i', el), knob = $('.slider b', el), lbl = $('#lenLbl', el);
   r.addEventListener('input', ()=>{
@@ -2277,7 +2331,11 @@ const ACT = {
     S.step = 3; save(); pushStep(); go('aiwiz');
   },
 
-  'set-style': (b) => { S.ai.style = b.dataset.v; save(); pushAI(); haptic('sel'); paint('aiwiz'); },
+  'set-style': (b) => { S.ai.style = b.dataset.v; save(); pushAI(); haptic('sel'); paint(current, false); },
+  'pick-hello': (b) => {
+    S.ai.hello = helloOptions()[+b.dataset.i][1];
+    save(); pushAI(); haptic('sel'); paint(current, false);
+  },
   'pick-style': () => pickSheet('Стиль общения', [['friendly','Дружелюбный'],['neutral','Нейтральный'],['formal','Формальный']], S.ai.style,
     v => { S.ai.style = v; save(); pushAI(); paint(current, false); }),
   'pick-lang': () => pickSheet('Язык ответов', [['RU','Русский'],['EN','English'],['RU+EN','Русский + English']], S.ai.lang,

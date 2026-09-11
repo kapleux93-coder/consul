@@ -215,6 +215,7 @@ function defaults(ownerId) {
        * не выбирал. Пусто — бот здоровается от имени компании, без имени. */
       name: '', style: 'friendly', lang: 'RU', length: 'short', lengthVal: 40,
       canProducts: true, canContacts: true, canDiscount: false,
+      hello: '',        // чем бот встречает клиента; пусто — соберём из названия
       handoff: ['клиент просит менеджера', 'жалоба'],
       instructions: '',
       banned: [],

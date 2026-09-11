@@ -460,6 +460,33 @@ function makeDocx(text) {
     w.ai.name = saved; store.save(w);
   });
 
+  await t('приветствие задаёт владелец, а не мы за него', async () => {
+    const w = store.getOrCreate(4242);
+    const r = await api('/api/ai', { patch: { hello: 'Привет! Это баня. Пишите, подберём.' } });
+    assert.strictEqual(r.status, 200);
+    sent.length = 0;
+    await handleIncoming(store.getOrCreate(4242), { chatId: 891, userId: 891, text: '/start',
+      firstName: 'Игорь', isCommand: true, ts: Date.now() });
+    assert.strictEqual(sent[0].text, 'Привет! Это баня. Пишите, подберём.');
+    await api('/api/ai', { patch: { hello: '' } });
+  });
+
+  await t('без своего приветствия собираем нейтральное', async () => {
+    const w = store.getOrCreate(4242);
+    w.ai.hello = ''; w.ai.name = 'Ника'; store.save(w);
+    sent.length = 0;
+    await handleIncoming(store.getOrCreate(4242), { chatId: 892, userId: 892, text: '/start',
+      firstName: 'Игорь', isCommand: true, ts: Date.now() });
+    assert.ok(/Ника/.test(sent[0].text), sent[0].text);
+    assert.ok(/Nordlight Store/.test(sent[0].text), 'и компания названа');
+  });
+
+  await t('слишком длинное приветствие обрезается, а не уходит целиком', async () => {
+    const r = await api('/api/ai', { patch: { hello: 'я'.repeat(900) } });
+    assert.ok(r.json.ai.hello.length <= 400, 'длина: ' + r.json.ai.hello.length);
+    await api('/api/ai', { patch: { hello: '' } });
+  });
+
   await t('на прямой вопрос «ты бот?» модели велено не врать', () => {
     const w = store.getOrCreate(4242);
     const sys = require('./ai').systemPrompt(w, []);

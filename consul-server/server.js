@@ -395,6 +395,26 @@ function exportData(w) {
   };
 }
 
+/* ------------------------------------------------------------ приветствие */
+
+/* Первое, что клиент видит от компании. Владелец задаёт его сам — готовые
+ * варианты в приложении подставляют сюда текст, а не выбирают номер шаблона:
+ * так владелец видит ровно то, что уйдёт клиенту, и может поправить любое
+ * слово. Пусто — собираем нейтральное из названия компании и имени бота. */
+function greeting(w) {
+  const own = String((w.ai && w.ai.hello) || '').trim();
+  if (own) return own.slice(0, 400);
+
+  const who = String((w.ai && w.ai.name) || '').trim();
+  const firm = String((w.biz && w.biz.name) || '').trim();
+  const intro = who && firm ? `Меня зовут ${who}, компания «${firm}»`
+    : who ? `Меня зовут ${who}`
+    : firm ? `Это ${firm}` : '';
+  return intro
+    ? `Здравствуйте! ${intro}. Напишите, что вас интересует — подскажу по товарам, ценам и доставке.`
+    : 'Здравствуйте! Напишите, чем могу помочь.';
+}
+
 /* ------------------------------------------------------------ база знаний */
 
 const KB_KINDS = ['text', 'doc', 'price', 'rules', 'faq', 'web'];
@@ -499,14 +519,7 @@ async function handleIncoming(w, msg) {
         // Здоровается тот, у кого есть имя: клиент должен понимать, с кем
         // говорит, а не переписываться с безымянным «ботом магазина».
         // Название в кавычках не склоняем — поэтому ставим его отдельной частью.
-        const who = String((w.ai && w.ai.name) || '').trim();
-        const firm = String(w.biz.name || '').trim();
-        const intro = who && firm ? `Меня зовут ${who}, компания «${firm}»`
-          : who ? `Меня зовут ${who}`
-          : firm ? `Это ${firm}` : '';
-        const hello = intro
-          ? `Здравствуйте! ${intro}. Напишите, что вас интересует — подскажу по товарам, ценам и доставке.`
-          : 'Здравствуйте! Напишите, чем могу помочь.';
+        const hello = greeting(w);
         if (await deliver(hello)) store.pushMessage(w, msg.chatId, { r: 'ai', t: hello, ts: Date.now() });
       }
       store.save(w); pushDialog(w, d);
@@ -922,7 +935,7 @@ const routes = {
   'POST /api/ai': async (req, res, body, user) => {
     const w = store.getOrCreate(user.id);
     const p = body.patch || body;
-    const str = ['name', 'style', 'lang', 'length', 'instructions'];
+    const str = ['name', 'style', 'lang', 'length', 'instructions', 'hello'];
     const bool = ['canProducts', 'canContacts', 'canDiscount', 'paused', 'humanize', 'selling', 'followUp'];
     const nums = { followUpMin: [10, 1440], quietFrom: [0, 23], quietTo: [0, 23], tzOffset: [-12, 14] };
     for (const [k, [lo, hi]] of Object.entries(nums)) {
@@ -931,7 +944,8 @@ const routes = {
         if (Number.isFinite(v)) w.ai[k] = Math.max(lo, Math.min(hi, Math.round(v)));
       }
     }
-    str.forEach(k => { if (p[k] != null) w.ai[k] = clean(p[k], k === 'instructions' ? 1200 : 40); });
+    const strMax = { instructions: 1200, hello: 400 };
+    str.forEach(k => { if (p[k] != null) w.ai[k] = clean(p[k], strMax[k] || 40); });
     bool.forEach(k => { if (p[k] != null) w.ai[k] = !!p[k]; });
     if (p.lengthVal != null) w.ai.lengthVal = Math.max(0, Math.min(100, Number(p.lengthVal) || 0));
     if (Array.isArray(p.handoff)) w.ai.handoff = p.handoff.slice(0, 12).map(x => clean(x, 80)).filter(Boolean);
@@ -1778,4 +1792,4 @@ process.on('SIGTERM', shutdown);
 
 if (require.main === module) boot();
 
-module.exports = { server, verifyInitData, publicState, handleIncoming, handlePlatformUpdate, htmlToText, routes, boot, sweepFollowUps };
+module.exports = { server, verifyInitData, publicState, handleIncoming, handlePlatformUpdate, greeting, htmlToText, routes, boot, sweepFollowUps };
